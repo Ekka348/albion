@@ -32,21 +32,40 @@ class AlbionGathererBot:
         self.last_processed_kills = set()
         self.is_monitoring = False
         self.monitoring_task = None
+        self.last_check_time = None
+        self.check_count = 0
+        self.last_kills_count = 0
 
     async def initialize(self):
         """Инициализация бота"""
-        self.application = (
-            Application.builder()
-            .token(config.TELEGRAM_BOT_TOKEN)
-            .build()
-        )
-        self.setup_handlers()
-        
+        # Проверка конфигурации
+        try:
+            if not config.TELEGRAM_BOT_TOKEN or config.TELEGRAM_BOT_TOKEN.startswith('ВАШ_'):
+                logger.error("❌ Токен бота не настроен!")
+                return
+                
+            if not config.TELEGRAM_CHAT_ID or config.TELEGRAM_CHAT_ID.startswith('ВАШ_'):
+                logger.error("❌ Chat ID не настроен!")
+                return
+                
+            self.application = (
+                Application.builder()
+                .token(config.TELEGRAM_BOT_TOKEN)
+                .build()
+            )
+            self.setup_handlers()
+            
+        except Exception as e:
+            logger.error(f"Ошибка инициализации: {e}")
+            raise
+
     def setup_handlers(self):
         """Настройка обработчиков"""
         self.application.add_handler(CommandHandler("start", self.start_command))
         self.application.add_handler(CommandHandler("menu", self.show_main_menu))
         self.application.add_handler(CommandHandler("status", self.status_command))
+        self.application.add_handler(CommandHandler("check", self.force_check_command))
+        self.application.add_handler(CommandHandler("botstatus", self.bot_status_command))
         self.application.add_handler(CallbackQueryHandler(self.handle_button_click))
         
         # Обработчик текстовых сообщений для установки зоны
@@ -56,16 +75,67 @@ class AlbionGathererBot:
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик команды /start"""
+        welcome_message = (
+            "🤖 **Добро пожаловать в Albion Gatherer Guard!**\n\n"
+            "Я ваш персональный страж, который:\n"
+            "• 🛡️ Следит за убийствами в вашей зоне\n"
+            "• ⚠️ Предупреждает об опасности\n"
+            "• ⏰ Отслеживает респаун ресурсов\n"
+            "• 🎯 Находит безопасные зоны для фарма\n\n"
+            "Используйте /menu для управления ботом"
+        )
+        
+        await update.message.reply_text(welcome_message, parse_mode='Markdown')
         await self.show_main_menu(update, context)
 
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик команды /status"""
         if not self.current_zone:
-            await update.message.reply_text("❌ Сначала установите зону через меню")
+            await update.message.reply_text("❌ Сначала установите зону через /menu")
             return
         
         status = await self.get_zone_status()
         await update.message.reply_text(status, parse_mode='Markdown')
+
+    async def force_check_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Принудительная проверка киллборда"""
+        if not self.current_zone:
+            await update.message.reply_text("❌ Сначала установите зону через /menu")
+            return
+            
+        await update.message.reply_text("🔍 Запускаю принудительную проверку...")
+        
+        kills = await self.get_recent_kills()
+        danger_level, score, details = await self.calculate_danger_level(kills)
+        
+        status = await self.get_zone_status()
+        await update.message.reply_text(status, parse_mode='Markdown')
+        
+        # Показываем детали проверки
+        check_info = (
+            f"✅ **Проверка завершена**\n"
+            f"⏰ Время: {datetime.now(pytz.UTC).strftime('%H:%M:%S MSK')}\n"
+            f"📊 Найдено убийств: {len(kills)}\n"
+            f"⚠️ Уровень опасности: {danger_level}\n"
+            f"🔢 Всего проверок: {self.check_count}"
+        )
+        
+        await update.message.reply_text(check_info, parse_mode='Markdown')
+
+    async def bot_status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показывает статус бота"""
+        status_message = (
+            f"🤖 **Статус Albion Gatherer Guard**\n\n"
+            f"📡 Мониторинг: {'🟢 Включен' if self.is_monitoring else '🔴 Выключен'}\n"
+            f"⏰ Последняя проверка: {self.last_check_time.strftime('%H:%M:%S MSK') if self.last_check_time else 'Никогда'}\n"
+            f"🔢 Всего проверок: {self.check_count}\n"
+            f"📊 Последние убийства: {self.last_kills_count}\n"
+            f"📍 Текущая зона: {self.current_zone or 'Не установлена'}\n"
+            f"🔄 Интервал проверок: {config.CHECK_INTERVAL_MINUTES} мин\n"
+            f"⏱️ Время работы: {datetime.now(pytz.UTC).strftime('%d.%m.%Y %H:%M MSK')}"
+        )
+        
+        await update.message.reply_text(status_message, parse_mode='Markdown')
 
     async def show_main_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Показывает главное меню"""
@@ -73,7 +143,9 @@ class AlbionGathererBot:
             [InlineKeyboardButton(config.BUTTONS_CONFIG["main_menu"]["set_zone"], callback_data="set_zone")],
             [InlineKeyboardButton(config.BUTTONS_CONFIG["main_menu"]["current_status"], callback_data="current_status")],
             [InlineKeyboardButton(config.BUTTONS_CONFIG["main_menu"]["respawn_info"], callback_data="respawn_info")],
-            [InlineKeyboardButton(config.BUTTONS_CONFIG["main_menu"]["safe_spots"], callback_data="safe_spots")]
+            [InlineKeyboardButton(config.BUTTONS_CONFIG["main_menu"]["safe_spots"], callback_data="safe_spots")],
+            [InlineKeyboardButton("🔄 Принудительная проверка", callback_data="force_check")],
+            [InlineKeyboardButton("🤖 Статус бота", callback_data="bot_status")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -111,6 +183,7 @@ class AlbionGathererBot:
             [InlineKeyboardButton("✅ Зона очищена", callback_data="zone_cleared")],
             [InlineKeyboardButton("⚠️ Проверить опасность", callback_data="check_danger")],
             [InlineKeyboardButton("⏰ Статус респауна", callback_data="check_respawn")],
+            [InlineKeyboardButton("🔄 Принудительная проверка", callback_data="force_check")],
             [InlineKeyboardButton("↩️ На главную", callback_data="back_to_main")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -156,12 +229,56 @@ class AlbionGathererBot:
                 safe_spots = await self.find_safe_spots()
                 await query.edit_message_text(safe_spots, parse_mode='Markdown')
                 
+            elif data == "force_check":
+                await self.force_check_callback(update, context)
+                
+            elif data == "bot_status":
+                await self.bot_status_callback(update, context)
+                
             elif data == "back_to_main":
                 await self.show_main_menu(update, context)
                 
         except Exception as e:
             logger.error(f"Error handling button click: {e}")
             await query.edit_message_text("❌ Произошла ошибка. Попробуйте снова.")
+
+    async def force_check_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик кнопки принудительной проверки"""
+        if not self.current_zone:
+            await update.callback_query.edit_message_text("❌ Сначала установите зону")
+            return
+            
+        await update.callback_query.edit_message_text("🔍 Запускаю проверку...")
+        
+        kills = await self.get_recent_kills()
+        danger_level, score, details = await self.calculate_danger_level(kills)
+        
+        status = await self.get_zone_status()
+        check_info = (
+            f"✅ **Проверка завершена**\n"
+            f"⏰ Время: {datetime.now(pytz.UTC).strftime('%H:%M:%S MSK')}\n"
+            f"📊 Найдено убийств: {len(kills)}\n"
+            f"⚠️ Уровень опасности: {danger_level}"
+        )
+        
+        await update.callback_query.edit_message_text(
+            f"{status}\n\n{check_info}",
+            parse_mode='Markdown'
+        )
+
+    async def bot_status_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик кнопки статуса бота"""
+        status_message = (
+            f"🤖 **Статус бота**\n\n"
+            f"📡 Мониторинг: {'🟢 Включен' if self.is_monitoring else '🔴 Выключен'}\n"
+            f"⏰ Последняя проверка: {self.last_check_time.strftime('%H:%M:%S MSK') if self.last_check_time else 'Никогда'}\n"
+            f"🔢 Всего проверок: {self.check_count}\n"
+            f"📊 Последние убийства: {self.last_kills_count}\n"
+            f"📍 Текущая зона: {self.current_zone or 'Не установлена'}\n"
+            f"🔄 Интервал: {config.CHECK_INTERVAL_MINUTES} мин"
+        )
+        
+        await update.callback_query.edit_message_text(status_message, parse_mode='Markdown')
 
     async def handle_zone_cleared(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик очистки зоны"""
@@ -233,6 +350,33 @@ class AlbionGathererBot:
         except Exception as e:
             logger.error(f"Error fetching kills: {e}")
             return []
+
+    async def send_check_status(self, kills_count=0):
+        """Отправляет статус проверки киллборда"""
+        try:
+            if not self.current_zone:
+                return
+                
+            self.check_count += 1
+            self.last_check_time = datetime.now(pytz.UTC)
+            self.last_kills_count = kills_count
+            
+            status_message = (
+                f"🔍 **Проверка #{self.check_count} завершена**\n"
+                f"⏰ Время: {self.last_check_time.strftime('%H:%M:%S MSK')}\n"
+                f"📍 Зона: {self.current_zone}\n"
+                f"📊 Найдено убийств: {kills_count}\n"
+                f"🔄 Следующая проверка через: {config.CHECK_INTERVAL_MINUTES} мин"
+            )
+            
+            await self.application.bot.send_message(
+                chat_id=config.TELEGRAM_CHAT_ID,
+                text=status_message,
+                parse_mode='Markdown'
+            )
+            
+        except Exception as e:
+            logger.error(f"Error sending check status: {e}")
 
     async def calculate_danger_level(self, kills_data: List[Dict]) -> Tuple[str, float, List[str]]:
         """Вычисляет уровень опасности"""
@@ -345,15 +489,36 @@ class AlbionGathererBot:
             
         return message
 
+    async def send_alert(self, message: str):
+        """Отправляет оповещение"""
+        try:
+            await self.application.bot.send_message(
+                chat_id=config.TELEGRAM_CHAT_ID,
+                text=message,
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            logger.error(f"Error sending alert: {e}")
+
     async def monitoring_job(self):
         """Фоновая задача мониторинга"""
         while self.is_monitoring:
             try:
                 if not self.current_zone:
+                    logger.info("⏳ Ожидаю установку зоны...")
                     await asyncio.sleep(config.CHECK_INTERVAL_MINUTES * 60)
                     continue
                     
+                # Логируем начало проверки
+                logger.info(f"🔍 Проверка киллборда для {self.current_zone}")
+                
+                # Получаем убийства
                 kills = await self.get_recent_kills()
+                
+                # Отправляем статус проверки
+                await self.send_check_status(len(kills))
+                
+                # Анализируем опасность
                 danger_level, score, details = await self.calculate_danger_level(kills)
                 
                 # Отправляем оповещение при изменении уровня опасности
@@ -366,56 +531,52 @@ class AlbionGathererBot:
                 
             except Exception as e:
                 logger.error(f"Monitoring job error: {e}")
-                await asyncio.sleep(60)  # Пауза при ошибке
-
-    async def send_alert(self, message: str):
-        """Отправляет оповещение"""
-        try:
-            await self.application.bot.send_message(
-                chat_id=config.TELEGRAM_CHAT_ID,
-                text=message,
-                parse_mode='Markdown'
-            )
-        except Exception as e:
-            logger.error(f"Error sending alert: {e}")
+                await asyncio.sleep(60)
 
     async def start_monitoring(self):
         """Запускает мониторинг"""
         self.is_monitoring = True
-        logger.info("Monitoring started")
+        logger.info("📡 Мониторинг запущен")
         await self.monitoring_job()
 
     async def stop_monitoring(self):
         """Останавливает мониторинг"""
         self.is_monitoring = False
-        logger.info("Monitoring stopped")
+        logger.info("📡 Мониторинг остановлен")
 
     async def run(self):
         """Запускает бота"""
-        await self.initialize()
-        logger.info("Bot is starting...")
-        
-        # Запускаем мониторинг в фоне
-        self.monitoring_task = asyncio.create_task(self.start_monitoring())
-        
         try:
+            await self.initialize()
+            if not self.application:
+                logger.error("❌ Не удалось инициализировать бота")
+                return
+                
+            logger.info("🤖 Бот запускается...")
+            
+            # Запускаем мониторинг в фоне
+            self.monitoring_task = asyncio.create_task(self.start_monitoring())
+            
+            # Запускаем бота
             await self.application.initialize()
             await self.application.start()
             await self.application.updater.start_polling()
             
+            logger.info("✅ Бот успешно запущен и работает")
+            
             # Бесконечный цикл ожидания
             while True:
-                await asyncio.sleep(3600)  # Спим 1 час и проверяем снова
+                await asyncio.sleep(3600)
                 
         except asyncio.CancelledError:
-            logger.info("Bot stopped")
+            logger.info("⏹️ Бот остановлен")
         except Exception as e:
-            logger.error(f"Bot error: {e}")
+            logger.error(f"❌ Ошибка бота: {e}")
         finally:
             await self.stop_monitoring()
             if self.monitoring_task:
                 self.monitoring_task.cancel()
-            if self.application:
+            if self.application and self.application.running:
                 await self.application.stop()
                 await self.application.shutdown()
 
@@ -423,16 +584,20 @@ def main():
     """Основная функция"""
     bot = AlbionGathererBot()
     
-    # Создаем и запускаем event loop вручную
+    # Создаем и запускаем event loop
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
     try:
+        logger.info("🚀 Запуск Albion Gatherer Guard...")
         loop.run_until_complete(bot.run())
     except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
+        logger.info("⏹️ Остановка по запросу пользователя")
+    except Exception as e:
+        logger.error(f"❌ Критическая ошибка: {e}")
     finally:
         loop.close()
+        logger.info("👋 Работа завершена")
 
 if __name__ == "__main__":
     main()

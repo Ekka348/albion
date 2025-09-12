@@ -1,9 +1,15 @@
 import os
 from datetime import timedelta
 
-# Настройки бота
-TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', 'ВАШ_ТОКЕН_БОТА')
-TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', 'ВАШ_CHAT_ID')
+# Только токен бота
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '').strip()
+
+# Проверка токена
+if not TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN.startswith('ВАШ_'):
+    raise ValueError("❌ TELEGRAM_BOT_TOKEN не установлен! Добавьте в переменные окружения.")
+
+if not TELEGRAM_BOT_TOKEN.count(':') == 1:
+    raise ValueError("❌ Неверный формат токена. Должен быть: '123456789:ABCdefGHIjklMNopqRSTuvwxyz'")
 
 # Настройки мониторинга
 CHECK_INTERVAL_MINUTES = 3

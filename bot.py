@@ -1,5 +1,4 @@
 import os
-import requests
 import asyncio
 import logging
 from datetime import datetime, timedelta

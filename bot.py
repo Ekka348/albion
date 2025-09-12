@@ -399,18 +399,40 @@ class AlbionGathererBot:
         self.monitoring_task = asyncio.create_task(self.start_monitoring())
         
         try:
-            await self.application.run_polling()
+            await self.application.initialize()
+            await self.application.start()
+            await self.application.updater.start_polling()
+            
+            # Бесконечный цикл ожидания
+            while True:
+                await asyncio.sleep(3600)  # Спим 1 час и проверяем снова
+                
         except asyncio.CancelledError:
             logger.info("Bot stopped")
+        except Exception as e:
+            logger.error(f"Bot error: {e}")
         finally:
             await self.stop_monitoring()
             if self.monitoring_task:
                 self.monitoring_task.cancel()
+            if self.application:
+                await self.application.stop()
+                await self.application.shutdown()
 
-async def main():
+def main():
     """Основная функция"""
     bot = AlbionGathererBot()
-    await bot.run()
+    
+    # Создаем и запускаем event loop вручную
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    try:
+        loop.run_until_complete(bot.run())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+    finally:
+        loop.close()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

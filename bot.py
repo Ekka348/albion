@@ -12,7 +12,6 @@ from telegram.ext import (
     ContextTypes, MessageHandler, filters
 )
 import aiohttp
-import schedule
 import pytz
 
 import config
@@ -33,6 +32,7 @@ class AlbionGathererBot:
         self.respawn_timers = {}
         self.last_processed_kills = set()
         self.is_monitoring = False
+        self.monitoring_task = None
 
     async def initialize(self):
         """Инициализация бота"""
@@ -195,12 +195,16 @@ class AlbionGathererBot:
         """Обработчик текстовых сообщений"""
         text = update.message.text.strip()
         
-        # Простая команда для установки зоны
         if text.lower() in ['мурквеалд', 'murkweald']:
             self.current_zone = "Murkweald (Red Zone)"
         elif text.lower() in ['шифтшадоу', 'shiftshadow']:
             self.current_zone = "Shiftshadow Expanse (Red Zone)"
-        # ... другие зоны
+        elif text.lower() in ['руннел', 'runnel']:
+            self.current_zone = "Runnel Sink (Red Zone)"
+        elif text.lower() in ['камланн', 'camlann']:
+            self.current_zone = "Camlann (Red Zone)"
+        elif text.lower() in ['домхайн', 'domhain']:
+            self.current_zone = "Domhain Chasm (Red Zone)"
             
         if self.current_zone:
             await update.message.reply_text(
@@ -344,21 +348,26 @@ class AlbionGathererBot:
 
     async def monitoring_job(self):
         """Фоновая задача мониторинга"""
-        if not self.current_zone or not self.is_monitoring:
-            return
-            
-        try:
-            kills = await self.get_recent_kills()
-            danger_level, score, details = await self.calculate_danger_level(kills)
-            
-            # Отправляем оповещение при изменении уровня опасности
-            if self.last_danger_level != danger_level:
-                status = await self.get_zone_status()
-                await self.send_alert(status)
-                self.last_danger_level = danger_level
+        while self.is_monitoring:
+            try:
+                if not self.current_zone:
+                    await asyncio.sleep(config.CHECK_INTERVAL_MINUTES * 60)
+                    continue
+                    
+                kills = await self.get_recent_kills()
+                danger_level, score, details = await self.calculate_danger_level(kills)
                 
-        except Exception as e:
-            logger.error(f"Monitoring job error: {e}")
+                # Отправляем оповещение при изменении уровня опасности
+                if self.last_danger_level != danger_level:
+                    status = await self.get_zone_status()
+                    await self.send_alert(status)
+                    self.last_danger_level = danger_level
+                    
+                await asyncio.sleep(config.CHECK_INTERVAL_MINUTES * 60)
+                
+            except Exception as e:
+                logger.error(f"Monitoring job error: {e}")
+                await asyncio.sleep(60)  # Пауза при ошибке
 
     async def send_alert(self, message: str):
         """Отправляет оповещение"""
@@ -375,11 +384,7 @@ class AlbionGathererBot:
         """Запускает мониторинг"""
         self.is_monitoring = True
         logger.info("Monitoring started")
-        
-        # Запускаем фоновую задачу
-        while self.is_monitoring:
-            await self.monitoring_job()
-            await asyncio.sleep(config.CHECK_INTERVAL_MINUTES * 60)
+        await self.monitoring_job()
 
     async def stop_monitoring(self):
         """Останавливает мониторинг"""
@@ -392,9 +397,16 @@ class AlbionGathererBot:
         logger.info("Bot is starting...")
         
         # Запускаем мониторинг в фоне
-        asyncio.create_task(self.start_monitoring())
+        self.monitoring_task = asyncio.create_task(self.start_monitoring())
         
-        await self.application.run_polling()
+        try:
+            await self.application.run_polling()
+        except asyncio.CancelledError:
+            logger.info("Bot stopped")
+        finally:
+            await self.stop_monitoring()
+            if self.monitoring_task:
+                self.monitoring_task.cancel()
 
 async def main():
     """Основная функция"""

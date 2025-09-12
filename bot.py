@@ -35,28 +35,42 @@ class AlbionGathererBot:
         self.last_check_time = None
         self.check_count = 0
         self.last_kills_count = 0
+        self.user_chat_id = None
 
     async def initialize(self):
         """Инициализация бота"""
-        # Проверка конфигурации
         try:
-            if not config.TELEGRAM_BOT_TOKEN or config.TELEGRAM_BOT_TOKEN.startswith('ВАШ_'):
-                logger.error("❌ Токен бота не настроен!")
+            # Детальная проверка конфигурации
+            logger.info("🔍 Проверка конфигурации...")
+            
+            if not config.TELEGRAM_BOT_TOKEN:
+                logger.error("❌ TELEGRAM_BOT_TOKEN не найден в config")
                 return
                 
-            if not config.TELEGRAM_CHAT_ID or config.TELEGRAM_CHAT_ID.startswith('ВАШ_'):
-                logger.error("❌ Chat ID не настроен!")
+            if config.TELEGRAM_BOT_TOKEN.startswith('ВАШ_') or config.TELEGRAM_BOT_TOKEN == 'your_bot_token_here':
+                logger.error("❌ Токен бота не настроен! Используется значение по умолчанию")
+                logger.error("💡 Добавьте TELEGRAM_BOT_TOKEN в переменные окружения Railway")
                 return
-                
+
+            # Проверка формата токена
+            if ':' not in config.TELEGRAM_BOT_TOKEN:
+                logger.error("❌ Неверный формат токена. Должен содержать ':'")
+                return
+
+            logger.info(f"✅ Токен найден: {config.TELEGRAM_BOT_TOKEN[:10]}...")
+            
+            # Инициализация бота
             self.application = (
                 Application.builder()
                 .token(config.TELEGRAM_BOT_TOKEN)
                 .build()
             )
+            
             self.setup_handlers()
+            logger.info("✅ Бот инициализирован успешно")
             
         except Exception as e:
-            logger.error(f"Ошибка инициализации: {e}")
+            logger.error(f"❌ Ошибка инициализации: {e}")
             raise
 
     def setup_handlers(self):
@@ -75,18 +89,28 @@ class AlbionGathererBot:
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик команды /start"""
-        welcome_message = (
-            "🤖 **Добро пожаловать в Albion Gatherer Guard!**\n\n"
-            "Я ваш персональный страж, который:\n"
-            "• 🛡️ Следит за убийствами в вашей зоне\n"
-            "• ⚠️ Предупреждает об опасности\n"
-            "• ⏰ Отслеживает респаун ресурсов\n"
-            "• 🎯 Находит безопасные зоны для фарма\n\n"
-            "Используйте /menu для управления ботом"
-        )
-        
-        await update.message.reply_text(welcome_message, parse_mode='Markdown')
-        await self.show_main_menu(update, context)
+        try:
+            # Сохраняем chat ID пользователя
+            self.user_chat_id = update.message.chat_id
+            logger.info(f"💾 Сохранен chat ID: {self.user_chat_id}")
+            
+            welcome_message = (
+                "🤖 **Добро пожаловать в Albion Gatherer Guard!**\n\n"
+                "Я ваш персональный страж, который:\n"
+                "• 🛡️ Следит за убийствами в вашей зоне\n"
+                "• ⚠️ Предупреждает об опасности\n"
+                "• ⏰ Отслеживает респаун ресурсов\n"
+                "• 🎯 Находит безопасные зоны для фарма\n\n"
+                "📍 **Сначала установите вашу зону через меню**\n"
+                "🔄 Затем бот начнет автоматический мониторинг"
+            )
+            
+            await update.message.reply_text(welcome_message, parse_mode='Markdown')
+            await self.show_main_menu(update, context)
+            
+        except Exception as e:
+            logger.error(f"Ошибка в start_command: {e}")
+            await update.message.reply_text("❌ Произошла ошибка. Попробуйте позже.")
 
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик команды /status"""
@@ -132,7 +156,7 @@ class AlbionGathererBot:
             f"📊 Последние убийства: {self.last_kills_count}\n"
             f"📍 Текущая зона: {self.current_zone or 'Не установлена'}\n"
             f"🔄 Интервал проверок: {config.CHECK_INTERVAL_MINUTES} мин\n"
-            f"⏱️ Время работы: {datetime.now(pytz.UTC).strftime('%d.%m.%Y %H:%M MSK')}"
+            f"👤 Ваш Chat ID: {self.user_chat_id or 'Не сохранен'}"
         )
         
         await update.message.reply_text(status_message, parse_mode='Markdown')
@@ -354,7 +378,7 @@ class AlbionGathererBot:
     async def send_check_status(self, kills_count=0):
         """Отправляет статус проверки киллборда"""
         try:
-            if not self.current_zone:
+            if not self.current_zone or not self.user_chat_id or not self.application:
                 return
                 
             self.check_count += 1
@@ -370,7 +394,7 @@ class AlbionGathererBot:
             )
             
             await self.application.bot.send_message(
-                chat_id=config.TELEGRAM_CHAT_ID,
+                chat_id=self.user_chat_id,
                 text=status_message,
                 parse_mode='Markdown'
             )
@@ -490,13 +514,14 @@ class AlbionGathererBot:
         return message
 
     async def send_alert(self, message: str):
-        """Отправляет оповещение"""
+        """Отправляет оповещение в чат пользователя"""
         try:
-            await self.application.bot.send_message(
-                chat_id=config.TELEGRAM_CHAT_ID,
-                text=message,
-                parse_mode='Markdown'
-            )
+            if self.user_chat_id and self.application:
+                await self.application.bot.send_message(
+                    chat_id=self.user_chat_id,
+                    text=message,
+                    parse_mode='Markdown'
+                )
         except Exception as e:
             logger.error(f"Error sending alert: {e}")
 
@@ -549,7 +574,7 @@ class AlbionGathererBot:
         try:
             await self.initialize()
             if not self.application:
-                logger.error("❌ Не удалось инициализировать бота")
+                logger.error("❌ Бот не может запуститься - проверьте логи выше")
                 return
                 
             logger.info("🤖 Бот запускается...")
@@ -563,6 +588,8 @@ class AlbionGathererBot:
             await self.application.updater.start_polling()
             
             logger.info("✅ Бот успешно запущен и работает")
+            logger.info(f"📍 Текущая зона: {self.current_zone or 'Не установлена'}")
+            logger.info(f"🔄 Интервал проверок: {config.CHECK_INTERVAL_MINUTES} мин")
             
             # Бесконечный цикл ожидания
             while True:

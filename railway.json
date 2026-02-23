@@ -1,11 +1,12 @@
 {
   "build": {
-    "builder": "NIXPACKS",
-    "buildCommand": "pip install -r requirements.txt"
+    "builder": "NIXPACKS"
   },
   "deploy": {
     "startCommand": "python bot.py",
     "healthcheckPath": "/",
-    "restartPolicyType": "ON_FAILURE"
+    "restartPolicyType": "ON_FAILURE",
+    "healthcheckTimeout": 100,
+    "restartPolicyMaxRetries": 10
   }
 }

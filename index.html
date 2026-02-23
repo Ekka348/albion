@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Пустошь: Бой с кабаном</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 16px;
+            margin: 0;
+        }
+        .monster-card {
+            background: #16213e;
+            border-radius: 20px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 2px solid #0f3460;
+        }
+        .monster-name {
+            font-size: 24px;
+            color: #e94560;
+            margin-bottom: 10px;
+        }
+        .hp-bar {
+            width: 100%;
+            height: 30px;
+            background: #0f3460;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+        .hp-fill {
+            height: 100%;
+            width: 100%;
+            background: #e94560;
+            line-height: 30px;
+            color: white;
+            transition: width 0.3s;
+        }
+        .monster-emoji {
+            font-size: 120px;
+            margin: 20px;
+            filter: drop-shadow(0 0 10px #e94560);
+        }
+        .attack-btn {
+            background: #e94560;
+            color: white;
+            border: none;
+            border-radius: 50px;
+            padding: 20px 50px;
+            font-size: 28px;
+            font-weight: bold;
+            margin: 20px;
+            cursor: pointer;
+            box-shadow: 0 5px 0 #0f3460;
+            transition: 0.1s;
+        }
+        .attack-btn:active {
+            transform: translateY(5px);
+            box-shadow: none;
+        }
+        .log {
+            background: #0f3460;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            font-size: 16px;
+            text-align: left;
+        }
+        .hp-text {
+            font-size: 20px;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="monster-card">
+        <div class="monster-name">🐗 МУТИРОВАННЫЙ КАБАН</div>
+        
+        <div class="hp-bar">
+            <div class="hp-fill" id="monsterHpBar" style="width: 100%;">100%</div>
+        </div>
+        <div class="hp-text" id="monsterHpText">100 / 100 HP</div>
+        
+        <div class="monster-emoji" id="monsterEmoji">🐗</div>
+        
+        <button class="attack-btn" onclick="attack()">⚔️ АТАКА</button>
+        
+        <div class="log" id="battleLog">
+            Нажми АТАКА, чтобы начать бой!
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.ready();
+        
+        // Состояние боя
+        let monsterHP = 100;
+        const maxMonsterHP = 100;
+        let playerHP = 100;
+        
+        function updateDisplay() {
+            const percent = (monsterHP / maxMonsterHP) * 100;
+            document.getElementById('monsterHpBar').style.width = percent + '%';
+            document.getElementById('monsterHpBar').innerText = Math.floor(percent) + '%';
+            document.getElementById('monsterHpText').innerText = monsterHP + ' / ' + maxMonsterHP + ' HP';
+            
+            // Меняем эмодзи в зависимости от здоровья
+            if (monsterHP < 30) {
+                document.getElementById('monsterEmoji').innerText = '😫';
+            } else if (monsterHP < 70) {
+                document.getElementById('monsterEmoji').innerText = '😠';
+            }
+        }
+        
+        function attack() {
+            if (monsterHP <= 0) {
+                document.getElementById('battleLog').innerHTML = '💀 Кабан уже мертв! Обнови страницу.';
+                return;
+            }
+            
+            // Урон игрока (15-30)
+            const playerDamage = Math.floor(Math.random() * 16) + 15;
+            monsterHP -= playerDamage;
+            if (monsterHP < 0) monsterHP = 0;
+            
+            // Урон монстра (5-15)
+            const monsterDamage = Math.floor(Math.random() * 11) + 5;
+            playerHP -= monsterDamage;
+            if (playerHP < 0) playerHP = 0;
+            
+            // Лог боя
+            const log = document.getElementById('battleLog');
+            log.innerHTML = `⚔️ Ты ударил кабана на <b>${playerDamage}</b> урона!<br>`;
+            log.innerHTML += `🐗 Кабан ударил тебя на <b>${monsterDamage}</b> урона!<br>`;
+            log.innerHTML += `❤️ Твое HP: ${playerHP}<br>`;
+            
+            if (monsterHP <= 0) {
+                log.innerHTML += '🎉 <b>ПОБЕДА!</b> Кабан повержен!';
+                document.getElementById('monsterEmoji').innerText = '💀';
+            } else if (playerHP <= 0) {
+                log.innerHTML += '💀 <b>ТЫ ПОГИБ...</b>';
+                document.getElementById('monsterEmoji').innerText = '🐗🔪';
+            }
+            
+            updateDisplay();
+            
+            // Отправляем данные боту
+            tg.sendData(JSON.stringify({
+                monster_hp: monsterHP,
+                player_hp: playerHP
+            }));
+        }
+        
+        // Начальное отображение
+        updateDisplay();
+    </script>
+</body>
+</html>

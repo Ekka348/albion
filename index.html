@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Пустошь: Бой</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+            margin: 0;
+        }
+        .monster-card {
+            background-color: #2a2a2a;
+            border-radius: 20px;
+            padding: 30px;
+            margin: 20px 0;
+            border: 2px solid #ff6b00;
+        }
+        .monster-name {
+            font-size: 24px;
+            color: #ff6b00;
+            margin-bottom: 10px;
+        }
+        .hp-bar {
+            width: 100%;
+            height: 30px;
+            background-color: #333;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+        .hp-fill {
+            height: 100%;
+            width: 80%;
+            background-color: #ff4444;
+            line-height: 30px;
+            color: white;
+        }
+        .attack-btn {
+            background-color: #ff6b00;
+            color: white;
+            border: none;
+            border-radius: 30px;
+            padding: 15px 40px;
+            font-size: 20px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        .attack-btn:active {
+            background-color: #ff4500;
+        }
+        .log {
+            background-color: #333;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            text-align: left;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="monster-card">
+        <div class="monster-name">🐗 МУТИРОВАННЫЙ КАБАН</div>
+        <div class="hp-bar">
+            <div class="hp-fill" id="monsterHpBar" style="width: 80%;">80%</div>
+        </div>
+        <div id="monsterHp">80 / 100 HP</div>
+        
+        <div style="margin: 30px 0;">
+            <div style="font-size: 100px;">🐗</div>
+        </div>
+        
+        <button class="attack-btn" onclick="attackMonster()">⚔️ АТАКОВАТЬ</button>
+        
+        <div class="log" id="battleLog">
+            Нажми атаку, чтобы начать бой!
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        
+        // Растягиваем на весь экран
+        tg.expand();
+        
+        // Говорим Telegram, что мы готовы
+        tg.ready();
+        
+        // Данные боя
+        let monsterHp = 80;
+        const maxMonsterHp = 100;
+        let playerHp = 60;
+        
+        function updateDisplay() {
+            // Обновляем полоску здоровья
+            const percent = (monsterHp / maxMonsterHp) * 100;
+            document.getElementById('monsterHpBar').style.width = percent + '%';
+            document.getElementById('monsterHpBar').textContent = Math.floor(percent) + '%';
+            document.getElementById('monsterHp').textContent = monsterHp + ' / ' + maxMonsterHp + ' HP';
+        }
+        
+        function attackMonster() {
+            if (monsterHp <= 0) {
+                document.getElementById('battleLog').innerHTML = 'Монстр уже мертв! Начни новый бой.';
+                return;
+            }
+            
+            // Наносим урон (10-20)
+            const damage = Math.floor(Math.random() * 11) + 10;
+            monsterHp -= damage;
+            
+            // Монстр тоже атакует
+            const monsterDamage = Math.floor(Math.random() * 8) + 5;
+            playerHp -= monsterDamage;
+            
+            // Лог боя
+            const log = document.getElementById('battleLog');
+            log.innerHTML = `⚔️ Ты нанес ${damage} урона!<br>`;
+            log.innerHTML += `🐗 Кабан ударил в ответ на ${monsterDamage} урона!<br>`;
+            log.innerHTML += `Твое HP: ${playerHp}<br>`;
+            
+            if (monsterHp <= 0) {
+                log.innerHTML += '🎉 ПОБЕДА! Монстр повержен!';
+            } else if (playerHp <= 0) {
+                log.innerHTML += '💀 Ты погиб...';
+            }
+            
+            // Обновляем экран
+            updateDisplay();
+            
+            // Отправляем данные боту
+            tg.sendData(JSON.stringify({
+                action: 'attack',
+                damage: damage,
+                monsterHp: monsterHp,
+                playerHp: playerHp
+            }));
+        }
+        
+        // Обновляем экран при загрузке
+        updateDisplay();
+    </script>
+</body>
+</html>

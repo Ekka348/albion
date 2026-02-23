@@ -2,78 +2,60 @@ import asyncio
 import logging
 import json
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from aiogram.utils import executor
+from aiogram.filters import Command
+from aiogram.types import InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+import os
 
-# Настройки
-API_TOKEN = '8404262144:AAFhLqVbU4FpIrM6KWfU6u9L1l5Qh-FYLWk'  # Получи у @BotFather
-WEBAPP_URL = 'https://твой-проект.railway.app'  # Сюда вставим URL позже
+# Настройки из переменных окружения
+API_TOKEN = os.getenv('BOT_TOKEN', '8404262144:AAFhLqVbU4FpIrM6KWfU6u9L1l5Qh-FYLWk')
+WEBAPP_URL = os.getenv('WEBAPP_URL', 'albion-production.up.railway.app')
 
 # Инициализация
 bot = Bot(token=API_TOKEN)
-dp = Dispatcher(bot)
+dp = Dispatcher()
 
-# Логирование
-logging.basicConfig(level=logging.INFO)
-
-# База данных в памяти (потом заменим на нормальную)
+# База данных в памяти
 user_sessions = {}
 
-@dp.message_handler(commands=['start'])
+# Сбрасываем вебхук при старте
+async def on_startup():
+    await bot.delete_webhook(drop_pending_updates=True)
+    print("✅ Вебхук сброшен, бот готов к работе")
+
+@dp.startup()
+async def startup_wrapper():
+    await on_startup()
+
+@dp.message(Command('start'))
 async def cmd_start(message: types.Message):
     """Отправляем приветствие и кнопку с игрой"""
     
-    # Кнопка для открытия Mini App
-    keyboard = InlineKeyboardMarkup().add(
-        InlineKeyboardButton(
-            "🎮 Войти в Пустошь",
-            web_app=types.WebAppInfo(url=WEBAPP_URL)
-        )
-    )
+    builder = InlineKeyboardBuilder()
+    builder.add(InlineKeyboardButton(
+        text="🎮 Войти в Пустошь",
+        web_app=types.WebAppInfo(url=WEBAPP_URL)
+    ))
     
     await message.answer(
         "🔥 Добро пожаловать в Пустошь!\n\n"
-        "Нажми кнопку ниже, чтобы начать бой с мутированным кабаном.",
-        reply_markup=keyboard
+        "Нажми кнопку ниже, чтобы начать бой с мутированным кабаном.\n\n"
+        f"🔗 URL приложения: {WEBAPP_URL}",
+        reply_markup=builder.as_markup()
     )
 
-@dp.message_handler(content_types=['web_app_data'])
-async def handle_web_app_data(message: types.Message):
-    """Получаем данные из Mini App"""
-    
-    try:
-        # Данные приходят как JSON строка
-        data = json.loads(message.web_app_data.data)
-        
-        user_id = message.from_user.id
-        
-        # Сохраняем состояние игрока
-        if user_id not in user_sessions:
-            user_sessions[user_id] = {
-                'player_hp': 100,
-                'monster_hp': 80,
-                'level': 1
-            }
-        
-        # Обновляем данные из игры
-        if 'monsterHp' in data:
-            user_sessions[user_id]['monster_hp'] = data['monsterHp']
-        if 'playerHp' in data:
-            user_sessions[user_id]['player_hp'] = data['playerHp']
-        
-        # Отвечаем в чат
-        await message.answer(
-            f"⚔️ Бой продолжается!\n"
-            f"Твое HP: {user_sessions[user_id]['player_hp']}\n"
-            f"HP кабана: {user_sessions[user_id]['monster_hp']}"
-        )
-        
-    except Exception as e:
-        await message.answer(f"Ошибка: {str(e)}")
+@dp.message(Command('help'))
+async def cmd_help(message: types.Message):
+    await message.answer(
+        "📖 Команды:\n"
+        "/start - начать игру\n"
+        "/help - эта помощь\n"
+        "/stats - статистика\n"
+        "/reset - сбросить бой"
+    )
 
-@dp.message_handler(commands=['stats'])
+@dp.message(Command('stats'))
 async def cmd_stats(message: types.Message):
-    """Показываем статистику игрока"""
     user_id = message.from_user.id
     if user_id in user_sessions:
         s = user_sessions[user_id]
@@ -86,19 +68,52 @@ async def cmd_stats(message: types.Message):
     else:
         await message.answer("Ты еще не начинал бой! Нажми /start")
 
-@dp.message_handler(commands=['reset'])
+@dp.message(Command('reset'))
 async def cmd_reset(message: types.Message):
-    """Сброс боя"""
     user_id = message.from_user.id
-    if user_id in user_sessions:
-        user_sessions[user_id] = {
-            'player_hp': 100,
-            'monster_hp': 80,
-            'level': 1
-        }
-    await message.answer("Бой сброшен! Начинай заново.")
+    user_sessions[user_id] = {
+        'player_hp': 100,
+        'monster_hp': 80,
+        'level': 1
+    }
+    await message.answer("⚡ Бой сброшен! Монстр возродился.")
+
+@dp.message(lambda message: message.web_app_data)
+async def handle_web_app_data(message: types.Message):
+    """Получаем данные из Mini App"""
+    
+    try:
+        data = json.loads(message.web_app_data.data)
+        user_id = message.from_user.id
+        
+        # Инициализируем сессию если новая
+        if user_id not in user_sessions:
+            user_sessions[user_id] = {
+                'player_hp': 100,
+                'monster_hp': 80,
+                'level': 1
+            }
+        
+        # Обновляем данные
+        if 'monsterHp' in data:
+            user_sessions[user_id]['monster_hp'] = data['monsterHp']
+        if 'playerHp' in data:
+            user_sessions[user_id]['player_hp'] = data['playerHp']
+        
+        # Отвечаем
+        await message.answer(
+            f"⚔️ Бой продолжается!\n"
+            f"Твое HP: {user_sessions[user_id]['player_hp']}\n"
+            f"HP кабана: {user_sessions[user_id]['monster_hp']}"
+        )
+        
+    except Exception as e:
+        await message.answer(f"❌ Ошибка: {str(e)}")
+
+async def main():
+    logging.basicConfig(level=logging.INFO)
+    print("🤖 Бот запускается...")
+    await dp.start_polling(bot)
 
 if __name__ == '__main__':
-    # Запуск бота
-
-    executor.start_polling(dp, skip_updates=True)
+    asyncio.run(main())

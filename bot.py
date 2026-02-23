@@ -16,7 +16,7 @@ PORT = int(os.getenv('PORT', 8080))
 
 # Настройки
 API_TOKEN = os.getenv('BOT_TOKEN', '8404262144:AAFhLqVbU4FpIrM6KWfU6u9L1l5Qh-FYLWk')
-WEBAPP_URL = os.getenv('WEBAPP_URL', 'https://твой-проект.railway.app')
+WEBAPP_URL = os.getenv('WEBAPP_URL', 'https://albion-production.up.railway.app/')
 
 print(f"🆔 Запуск инстанса: {INSTANCE_ID}")
 print(f"🚀 Порт: {PORT}")
@@ -152,3 +152,4 @@ if __name__ == '__main__':
         print("👋 Бот остановлен")
     except Exception as e:
         print(f"❌ Критическая ошибка: {e}")
+

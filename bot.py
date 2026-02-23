@@ -1,12 +1,18 @@
 import asyncio
 import logging
 import json
+import os
+import random
+import string
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-import os
 from aiohttp import web
+
+# Уникальный ID инстанса
+INSTANCE_ID = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+print(f"🆔 Запуск инстанса: {INSTANCE_ID}")
 
 # Настройки
 API_TOKEN = os.getenv('BOT_TOKEN', '8404262144:AAFhLqVbU4FpIrM6KWfU6u9L1l5Qh-FYLWk')
@@ -19,27 +25,23 @@ dp = Dispatcher()
 
 user_sessions = {}
 
-# Жесткий сброс ВСЕГО
+# Принудительный сброс при старте
 async def on_startup():
-    # Сбрасываем вебхук и удаляем все ожидающие обновления
+    print("🔄 Сброс вебхука...")
     await bot.delete_webhook(drop_pending_updates=True)
     print("✅ Вебхук сброшен")
     
-    # Дополнительно: получаем информацию о вебхуке для проверки
+    # Проверяем подключения
     webhook_info = await bot.get_webhook_info()
     print(f"📊 Инфо вебхука: {webhook_info}")
-    
-    # Закрываем все сессии (на всякий случай)
-    await bot.session.close()
-    print("✅ Сессии закрыты")
 
 @dp.startup()
 async def startup_wrapper():
     await on_startup()
 
-# HTTP сервер
+# HTTP сервер для healthcheck
 async def handle_healthcheck(request):
-    return web.Response(text="OK", status=200)
+    return web.Response(text=f"OK {INSTANCE_ID}", status=200)
 
 async def run_http_server():
     app = web.Application()
@@ -61,21 +63,15 @@ async def cmd_start(message: types.Message):
     ))
     
     await message.answer(
-        "🔥 Добро пожаловать в Пустошь!\n\n"
-        "Нажми кнопку ниже, чтобы начать бой.\n\n"
-        f"🔗 URL: {WEBAPP_URL}",
+        f"🔥 Добро пожаловать в Пустошь!\n"
+        f"🆔 Инстанс: {INSTANCE_ID}\n\n"
+        f"Нажми кнопку ниже, чтобы начать бой.",
         reply_markup=builder.as_markup()
     )
 
 @dp.message(Command('help'))
 async def cmd_help(message: types.Message):
-    await message.answer(
-        "📖 Команды:\n"
-        "/start - начать игру\n"
-        "/help - помощь\n"
-        "/stats - статистика\n"
-        "/reset - сброс боя"
-    )
+    await message.answer("Команды: /start, /help, /stats, /reset")
 
 @dp.message(Command('stats'))
 async def cmd_stats(message: types.Message):
@@ -83,10 +79,9 @@ async def cmd_stats(message: types.Message):
     if user_id in user_sessions:
         s = user_sessions[user_id]
         await message.answer(
-            f"📊 Статистика:\n"
+            f"📊 Статистика (инстанс: {INSTANCE_ID}):\n"
             f"❤️ Ты: {s['player_hp']} HP\n"
-            f"🐗 Кабан: {s['monster_hp']} HP\n"
-            f"📈 Уровень: {s['level']}"
+            f"🐗 Кабан: {s['monster_hp']} HP"
         )
     else:
         await message.answer("Нет данных. Начни бой через /start")
@@ -99,7 +94,7 @@ async def cmd_reset(message: types.Message):
         'monster_hp': 80,
         'level': 1
     }
-    await message.answer("⚡ Бой сброшен!")
+    await message.answer(f"⚡ Бой сброшен! (инстанс: {INSTANCE_ID})")
 
 @dp.message(lambda message: message.web_app_data)
 async def handle_web_app_data(message: types.Message):
@@ -108,11 +103,7 @@ async def handle_web_app_data(message: types.Message):
         user_id = message.from_user.id
         
         if user_id not in user_sessions:
-            user_sessions[user_id] = {
-                'player_hp': 100,
-                'monster_hp': 80,
-                'level': 1
-            }
+            user_sessions[user_id] = {'player_hp': 100, 'monster_hp': 80, 'level': 1}
         
         if 'monsterHp' in data:
             user_sessions[user_id]['monster_hp'] = data['monsterHp']
@@ -120,7 +111,7 @@ async def handle_web_app_data(message: types.Message):
             user_sessions[user_id]['player_hp'] = data['playerHp']
         
         await message.answer(
-            f"⚔️ Бой:\n"
+            f"⚔️ Бой (инстанс: {INSTANCE_ID}):\n"
             f"Ты: {user_sessions[user_id]['player_hp']} HP\n"
             f"Кабан: {user_sessions[user_id]['monster_hp']} HP"
         )
@@ -134,16 +125,18 @@ async def main():
     # Запускаем HTTP
     asyncio.create_task(run_http_server())
     
-    print("🤖 Запуск бота...")
+    print(f"🤖 Запуск бота {INSTANCE_ID}...")
     
-    # Пробуем запустить polling
+    # Запускаем с обработкой ошибок
     try:
         await dp.start_polling(bot)
     except Exception as e:
-        print(f"❌ Ошибка polling: {e}")
-        # Если ошибка - пробуем еще раз с задержкой
+        print(f"❌ Ошибка: {e}")
         await asyncio.sleep(5)
         await dp.start_polling(bot)
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("👋 Бот остановлен")

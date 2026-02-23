@@ -30,13 +30,16 @@
             background-position: center;
             background-repeat: no-repeat;
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-end; /* Прижимаем содержимое к низу */
             padding: 20px;
+            padding-bottom: 80px; /* Отступ от низа */
             position: relative;
+            background-color: #1a1a2e; /* Запасной цвет, если фото не загрузится */
         }
 
-        /* Легкое затемнение для кнопки (опционально - можешь убрать) */
+        /* Легкое затемнение для читаемости */
         .menu-container::before {
             content: '';
             position: absolute;
@@ -44,7 +47,7 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0, 0, 0, 0.2);
+            background: rgba(0, 0, 0, 0.3);
             z-index: 1;
         }
 
@@ -55,7 +58,8 @@
             width: 280px;
             height: 90px;
             cursor: pointer;
-            animation: fadeIn 1s ease-out;
+            animation: fadeInUp 1s ease-out;
+            margin-bottom: 20px; /* Дополнительный отступ */
         }
 
         /* Картинка кнопки */
@@ -78,15 +82,15 @@
             transform: scale(0.95);
         }
 
-        /* Анимация появления */
-        @keyframes fadeIn {
+        /* Анимация появления снизу */
+        @keyframes fadeInUp {
             from {
                 opacity: 0;
-                transform: scale(0.9);
+                transform: translateY(30px);
             }
             to {
                 opacity: 1;
-                transform: scale(1);
+                transform: translateY(0);
             }
         }
 
@@ -95,6 +99,9 @@
             .start-button-container {
                 width: 240px;
                 height: 77px;
+            }
+            .menu-container {
+                padding-bottom: 60px;
             }
         }
     </style>
@@ -109,33 +116,27 @@
     <script>
         const tg = window.Telegram.WebApp;
         
-        // Расширяем на весь экран
         tg.expand();
         tg.ready();
         
         function startGame() {
-            // Тактильный отклик
             tg.HapticFeedback.impactOccurred('heavy');
             
-            // Отправляем событие в бот
             tg.sendData(JSON.stringify({
                 action: 'start_game',
                 timestamp: Date.now()
             }));
             
-            // Переходим в игру
             setTimeout(() => {
                 window.location.href = 'game.html';
             }, 200);
         }
         
-        // Предзагрузка game.html
         const preloadLink = document.createElement('link');
         preloadLink.rel = 'prefetch';
         preloadLink.href = 'game.html';
         document.head.appendChild(preloadLink);
         
-        // Скрываем основную кнопку Telegram
         tg.MainButton.hide();
     </script>
 </body>

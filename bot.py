@@ -6,7 +6,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils import executor
 
 # Настройки
-API_TOKEN = 'ТВОЙ_ТОКЕН_БОТА'  # Получи у @BotFather
+API_TOKEN = '8404262144:AAFhLqVbU4FpIrM6KWfU6u9L1l5Qh-FYLWk'  # Получи у @BotFather
 WEBAPP_URL = 'https://твой-проект.railway.app'  # Сюда вставим URL позже
 
 # Инициализация
@@ -100,4 +100,5 @@ async def cmd_reset(message: types.Message):
 
 if __name__ == '__main__':
     # Запуск бота
+
     executor.start_polling(dp, skip_updates=True)

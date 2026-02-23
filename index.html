@@ -39,6 +39,16 @@
             font-size: 20px;
             border-radius: 30px;
             margin: 10px;
+            cursor: pointer;
+        }
+        button:active {
+            background: #ff4500;
+        }
+        .log {
+            background: #333;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
         }
     </style>
 </head>
@@ -49,7 +59,7 @@
     </div>
     <div class="monster">🐗</div>
     <button onclick="attack()">⚔️ АТАКОВАТЬ</button>
-    <div id="log" style="margin-top: 20px;">Нажми атаку!</div>
+    <div class="log" id="log">Нажми атаку, чтобы начать бой!</div>
 
     <script>
         const tg = window.Telegram.WebApp;
@@ -58,38 +68,43 @@
 
         let monsterHp = 80;
         let playerHp = 100;
+        const maxMonsterHp = 80;
+
+        function updateDisplay() {
+            const percent = (monsterHp / maxMonsterHp) * 100;
+            document.getElementById('monsterHpBar').style.width = percent + '%';
+            document.getElementById('monsterHpBar').innerText = Math.floor(percent) + '%';
+        }
 
         function attack() {
             if (monsterHp <= 0) {
-                document.getElementById('log').innerText = 'Монстр уже мертв!';
+                document.getElementById('log').innerHTML = '💀 Монстр уже мертв! Начни новый бой.';
                 return;
             }
 
             // Урон игрока
             const damage = Math.floor(Math.random() * 20) + 10;
             monsterHp -= damage;
-
+            
             // Урон монстра
             const monsterDamage = Math.floor(Math.random() * 15) + 5;
             playerHp -= monsterDamage;
 
-            // Обновляем лог
+            // Лог
             const log = document.getElementById('log');
             log.innerHTML = `⚔️ Ты нанес ${damage} урона!<br>`;
             log.innerHTML += `🐗 Кабан ударил на ${monsterDamage}!<br>`;
-
+            
             if (monsterHp <= 0) {
-                log.innerHTML += '🎉 ПОБЕДА!';
+                log.innerHTML += '🎉 ПОБЕДА! Монстр повержен!';
                 monsterHp = 0;
-            }
-            if (playerHp <= 0) {
+            } else if (playerHp <= 0) {
                 log.innerHTML += '💀 Ты погиб...';
+            } else {
+                log.innerHTML += `❤️ Твое HP: ${playerHp}`;
             }
 
-            // Обновляем полоску
-            const percent = Math.max(0, (monsterHp / 80) * 100);
-            document.getElementById('monsterHpBar').style.width = percent + '%';
-            document.getElementById('monsterHpBar').innerText = Math.floor(percent) + '%';
+            updateDisplay();
 
             // Отправляем боту
             tg.sendData(JSON.stringify({
@@ -97,6 +112,8 @@
                 playerHp: playerHp
             }));
         }
+
+        updateDisplay();
     </script>
 </body>
 </html>

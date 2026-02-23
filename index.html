@@ -1,166 +1,277 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Пустошь: Бой с кабаном</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Endless Path</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body {
-            background: #1a1a2e;
-            color: #fff;
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 16px;
+        * {
             margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        .monster-card {
-            background: #16213e;
-            border-radius: 20px;
-            padding: 20px;
-            margin: 20px 0;
-            border: 2px solid #0f3460;
-        }
-        .monster-name {
-            font-size: 24px;
-            color: #e94560;
-            margin-bottom: 10px;
-        }
-        .hp-bar {
-            width: 100%;
-            height: 30px;
-            background: #0f3460;
-            border-radius: 15px;
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: #000;
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             overflow: hidden;
-            margin: 15px 0;
         }
-        .hp-fill {
-            height: 100%;
+
+        .menu-container {
             width: 100%;
-            background: #e94560;
-            line-height: 30px;
-            color: white;
-            transition: width 0.3s;
+            max-width: 450px;
+            height: 100vh;
+            background-image: url('assets/background.jpg');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: 40px 20px;
+            position: relative;
         }
-        .monster-emoji {
-            font-size: 120px;
-            margin: 20px;
-            filter: drop-shadow(0 0 10px #e94560);
+
+        /* Динамическое затемнение с эффектом */
+        .menu-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(180deg, 
+                rgba(0,0,0,0.3) 0%, 
+                rgba(0,0,0,0.5) 50%,
+                rgba(0,0,0,0.8) 100%);
+            z-index: 1;
         }
-        .attack-btn {
-            background: #e94560;
-            color: white;
-            border: none;
-            border-radius: 50px;
-            padding: 20px 50px;
-            font-size: 28px;
-            font-weight: bold;
-            margin: 20px;
-            cursor: pointer;
-            box-shadow: 0 5px 0 #0f3460;
-            transition: 0.1s;
+
+        .content {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            height: 100%;
         }
-        .attack-btn:active {
-            transform: translateY(5px);
-            box-shadow: none;
+
+        /* Название игры с эпичным стилем */
+        .game-title {
+            text-align: center;
+            margin-top: 80px;
+            animation: fadeInDown 1.2s ease-out;
         }
-        .log {
-            background: #0f3460;
-            border-radius: 10px;
-            padding: 15px;
-            margin-top: 20px;
+
+        .game-title h1 {
+            font-size: 56px;
+            font-weight: 900;
+            text-transform: uppercase;
+            color: #fff;
+            text-shadow: 
+                0 0 20px #ff6b00,
+                0 0 40px #ff4500,
+                2px 2px 4px rgba(0,0,0,0.5);
+            letter-spacing: 6px;
+            line-height: 1.2;
+            animation: glowPulse 2s infinite;
+        }
+
+        .game-title h1:first-child {
+            font-size: 48px;
+            margin-bottom: -10px;
+        }
+
+        .game-title h1:last-child {
+            font-size: 64px;
+            color: #ff6b00;
+        }
+
+        .game-title p {
             font-size: 16px;
-            text-align: left;
+            color: #ffd700;
+            margin-top: 15px;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            text-shadow: 0 0 10px #ff6b00;
+            opacity: 0.9;
         }
-        .hp-text {
-            font-size: 20px;
-            margin: 10px;
+
+        @keyframes glowPulse {
+            0% { text-shadow: 0 0 20px #ff6b00, 0 0 40px #ff4500; }
+            50% { text-shadow: 0 0 30px #ff4500, 0 0 60px #ff0000; }
+            100% { text-shadow: 0 0 20px #ff6b00, 0 0 40px #ff4500; }
+        }
+
+        /* Контейнер для кнопки с картинкой */
+        .start-button-container {
+            margin-bottom: 100px;
+            position: relative;
+            width: 280px;
+            height: 90px;
+            cursor: pointer;
+            animation: fadeInUp 1.2s ease-out 0.3s both;
+        }
+
+        /* Картинка кнопки */
+        .start-button-image {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            position: relative;
+            z-index: 3;
+            filter: drop-shadow(0 10px 15px rgba(0,0,0,0.5));
+            transition: all 0.3s ease;
+        }
+
+        /* Эффект свечения при наведении */
+        .start-button-container:hover .start-button-image {
+            transform: scale(1.05);
+            filter: drop-shadow(0 0 20px #ff6b00) drop-shadow(0 0 40px #ff4500);
+        }
+
+        /* Эффект нажатия */
+        .start-button-container:active .start-button-image {
+            transform: scale(0.95);
+            filter: drop-shadow(0 0 30px #ff0000);
+        }
+
+        /* Дополнительный эффект свечения (опционально) */
+        .button-glow {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at center, #ff6b00 0%, transparent 70%);
+            border-radius: 50%;
+            opacity: 0;
+            z-index: 2;
+            transition: opacity 0.3s;
+            animation: buttonPulse 2s infinite;
+        }
+
+        .start-button-container:hover .button-glow {
+            opacity: 0.3;
+        }
+
+        @keyframes buttonPulse {
+            0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.2; }
+            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.4; }
+            100% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.2; }
+        }
+
+        /* Версия игры */
+        .version {
+            position: relative;
+            z-index: 2;
+            color: rgba(255,255,255,0.4);
+            font-size: 12px;
+            margin-bottom: 20px;
+            animation: fadeIn 1s ease-out 0.6s both;
+        }
+
+        /* Анимации */
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* Медиа-запросы для мобильных */
+        @media (max-width: 400px) {
+            .game-title h1:first-child { font-size: 40px; }
+            .game-title h1:last-child { font-size: 52px; }
+            .start-button-container { width: 240px; height: 77px; }
         }
     </style>
 </head>
 <body>
-    <div class="monster-card">
-        <div class="monster-name">🐗 МУТИРОВАННЫЙ КАБАН</div>
-        
-        <div class="hp-bar">
-            <div class="hp-fill" id="monsterHpBar" style="width: 100%;">100%</div>
-        </div>
-        <div class="hp-text" id="monsterHpText">100 / 100 HP</div>
-        
-        <div class="monster-emoji" id="monsterEmoji">🐗</div>
-        
-        <button class="attack-btn" onclick="attack()">⚔️ АТАКА</button>
-        
-        <div class="log" id="battleLog">
-            Нажми АТАКА, чтобы начать бой!
+    <div class="menu-container">
+        <div class="content">
+            <div class="game-title">
+                <h1>ENDLESS</h1>
+                <h1>PATH</h1>
+                <p>✧ ВЫЖИВАНИЕ НАЧИНАЕТСЯ ✧</p>
+            </div>
+            
+            <!-- Кнопка с картинкой -->
+            <div class="start-button-container" onclick="startGame()">
+                <img src="assets/start-button.png" alt="Начать игру" class="start-button-image">
+                <div class="button-glow"></div>
+            </div>
+            
+            <div class="version">
+                PRE-ALPHA • v0.1.0
+            </div>
         </div>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
+        
+        // Расширяем на весь экран
         tg.expand();
         tg.ready();
         
-        // Состояние боя
-        let monsterHP = 100;
-        const maxMonsterHP = 100;
-        let playerHP = 100;
-        
-        function updateDisplay() {
-            const percent = (monsterHP / maxMonsterHP) * 100;
-            document.getElementById('monsterHpBar').style.width = percent + '%';
-            document.getElementById('monsterHpBar').innerText = Math.floor(percent) + '%';
-            document.getElementById('monsterHpText').innerText = monsterHP + ' / ' + maxMonsterHP + ' HP';
+        // Тактильный отклик (для мобильных)
+        function startGame() {
+            // Вибрация/тактильный отклик
+            tg.HapticFeedback.impactOccurred('heavy');
             
-            // Меняем эмодзи в зависимости от здоровья
-            if (monsterHP < 30) {
-                document.getElementById('monsterEmoji').innerText = '😫';
-            } else if (monsterHP < 70) {
-                document.getElementById('monsterEmoji').innerText = '😠';
-            }
-        }
-        
-        function attack() {
-            if (monsterHP <= 0) {
-                document.getElementById('battleLog').innerHTML = '💀 Кабан уже мертв! Обнови страницу.';
-                return;
-            }
+            // Можно добавить звук (если будет)
             
-            // Урон игрока (15-30)
-            const playerDamage = Math.floor(Math.random() * 16) + 15;
-            monsterHP -= playerDamage;
-            if (monsterHP < 0) monsterHP = 0;
-            
-            // Урон монстра (5-15)
-            const monsterDamage = Math.floor(Math.random() * 11) + 5;
-            playerHP -= monsterDamage;
-            if (playerHP < 0) playerHP = 0;
-            
-            // Лог боя
-            const log = document.getElementById('battleLog');
-            log.innerHTML = `⚔️ Ты ударил кабана на <b>${playerDamage}</b> урона!<br>`;
-            log.innerHTML += `🐗 Кабан ударил тебя на <b>${monsterDamage}</b> урона!<br>`;
-            log.innerHTML += `❤️ Твое HP: ${playerHP}<br>`;
-            
-            if (monsterHP <= 0) {
-                log.innerHTML += '🎉 <b>ПОБЕДА!</b> Кабан повержен!';
-                document.getElementById('monsterEmoji').innerText = '💀';
-            } else if (playerHP <= 0) {
-                log.innerHTML += '💀 <b>ТЫ ПОГИБ...</b>';
-                document.getElementById('monsterEmoji').innerText = '🐗🔪';
-            }
-            
-            updateDisplay();
-            
-            // Отправляем данные боту
+            // Отправляем событие в бот
             tg.sendData(JSON.stringify({
-                monster_hp: monsterHP,
-                player_hp: playerHP
+                action: 'start_game',
+                timestamp: Date.now()
             }));
+            
+            // Переходим в игру с небольшой задержкой для анимации
+            setTimeout(() => {
+                window.location.href = 'game.html';
+            }, 200);
         }
         
-        // Начальное отображение
-        updateDisplay();
+        // Предзагрузка game.html для плавности
+        const preloadLink = document.createElement('link');
+        preloadLink.rel = 'prefetch';
+        preloadLink.href = 'game.html';
+        document.head.appendChild(preloadLink);
+        
+        // Скрываем основную кнопку Telegram
+        tg.MainButton.hide();
     </script>
 </body>
 </html>

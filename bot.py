@@ -21,6 +21,7 @@ WEBAPP_URL = os.getenv('WEBAPP_URL', 'https://albion-production.up.railway.app/'
 print(f"🆔 Запуск инстанса: {INSTANCE_ID}")
 print(f"🚀 Порт: {PORT}")
 print(f"🤖 Токен: {API_TOKEN[:10]}...")
+print(f"🌐 WebApp URL: {WEBAPP_URL}")
 
 # Инициализация бота
 bot = Bot(token=API_TOKEN)
@@ -30,22 +31,12 @@ user_sessions = {}
 
 # HTTP сервер
 async def handle_healthcheck(request):
-    """Для healthcheck Railway"""
     return web.Response(text=f"OK {INSTANCE_ID}", status=200)
-
-async def handle_info(request):
-    """Информация о сервере"""
-    return web.json_response({
-        "instance_id": INSTANCE_ID,
-        "status": "running",
-        "bot": "active"
-    })
 
 async def run_http_server():
     app = web.Application()
     app.router.add_get('/', handle_healthcheck)
     app.router.add_get('/health', handle_healthcheck)
-    app.router.add_get('/info', handle_info)
     
     runner = web.AppRunner(app)
     await runner.setup()
@@ -56,12 +47,7 @@ async def run_http_server():
 # Команды бота
 @dp.message(Command('start'))
 async def cmd_start(message: types.Message):
-    user_id = message.from_user.id
-    user_sessions[user_id] = user_sessions.get(user_id, {
-        'player_hp': 100,
-        'monster_hp': 80,
-        'level': 1
-    })
+    print(f"🔥 /start от {message.from_user.id}")
     
     builder = InlineKeyboardBuilder()
     builder.add(InlineKeyboardButton(
@@ -88,8 +74,7 @@ async def cmd_stats(message: types.Message):
         await message.answer(
             f"📊 Статистика (инстанс: {INSTANCE_ID}):\n"
             f"❤️ Ты: {s['player_hp']} HP\n"
-            f"🐗 Кабан: {s['monster_hp']} HP\n"
-            f"📈 Уровень: {s['level']}"
+            f"🐗 Кабан: {s['monster_hp']} HP"
         )
     else:
         await message.answer("Нет данных. Напиши /start")
@@ -152,4 +137,3 @@ if __name__ == '__main__':
         print("👋 Бот остановлен")
     except Exception as e:
         print(f"❌ Критическая ошибка: {e}")
-

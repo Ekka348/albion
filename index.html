@@ -34,12 +34,12 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: space-between;
-            padding: 40px 20px;
+            justify-content: center; /* Изменено с space-between на center */
+            padding: 20px;
             position: relative;
         }
 
-        /* Динамическое затемнение с эффектом */
+        /* Затемнение для читаемости */
         .menu-container::before {
             content: '';
             position: absolute;
@@ -61,14 +61,13 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: space-between;
-            height: 100%;
+            justify-content: center; /* Центрируем по вертикали */
+            gap: 60px; /* Расстояние между названием и кнопкой */
         }
 
-        /* Название игры с эпичным стилем */
+        /* Название игры */
         .game-title {
             text-align: center;
-            margin-top: 80px;
             animation: fadeInDown 1.2s ease-out;
         }
 
@@ -96,25 +95,14 @@
             color: #ff6b00;
         }
 
-        .game-title p {
-            font-size: 16px;
-            color: #ffd700;
-            margin-top: 15px;
-            text-transform: uppercase;
-            letter-spacing: 4px;
-            text-shadow: 0 0 10px #ff6b00;
-            opacity: 0.9;
-        }
-
         @keyframes glowPulse {
             0% { text-shadow: 0 0 20px #ff6b00, 0 0 40px #ff4500; }
             50% { text-shadow: 0 0 30px #ff4500, 0 0 60px #ff0000; }
             100% { text-shadow: 0 0 20px #ff6b00, 0 0 40px #ff4500; }
         }
 
-        /* Контейнер для кнопки с картинкой */
+        /* Контейнер для кнопки */
         .start-button-container {
-            margin-bottom: 100px;
             position: relative;
             width: 280px;
             height: 90px;
@@ -133,7 +121,7 @@
             transition: all 0.3s ease;
         }
 
-        /* Эффект свечения при наведении */
+        /* Эффект при наведении */
         .start-button-container:hover .start-button-image {
             transform: scale(1.05);
             filter: drop-shadow(0 0 20px #ff6b00) drop-shadow(0 0 40px #ff4500);
@@ -143,42 +131,6 @@
         .start-button-container:active .start-button-image {
             transform: scale(0.95);
             filter: drop-shadow(0 0 30px #ff0000);
-        }
-
-        /* Дополнительный эффект свечения (опционально) */
-        .button-glow {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 100%;
-            height: 100%;
-            background: radial-gradient(circle at center, #ff6b00 0%, transparent 70%);
-            border-radius: 50%;
-            opacity: 0;
-            z-index: 2;
-            transition: opacity 0.3s;
-            animation: buttonPulse 2s infinite;
-        }
-
-        .start-button-container:hover .button-glow {
-            opacity: 0.3;
-        }
-
-        @keyframes buttonPulse {
-            0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.2; }
-            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.4; }
-            100% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.2; }
-        }
-
-        /* Версия игры */
-        .version {
-            position: relative;
-            z-index: 2;
-            color: rgba(255,255,255,0.4);
-            font-size: 12px;
-            margin-bottom: 20px;
-            animation: fadeIn 1s ease-out 0.6s both;
         }
 
         /* Анимации */
@@ -204,16 +156,12 @@
             }
         }
 
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
         /* Медиа-запросы для мобильных */
         @media (max-width: 400px) {
             .game-title h1:first-child { font-size: 40px; }
             .game-title h1:last-child { font-size: 52px; }
             .start-button-container { width: 240px; height: 77px; }
+            .content { gap: 40px; }
         }
     </style>
 </head>
@@ -223,18 +171,15 @@
             <div class="game-title">
                 <h1>ENDLESS</h1>
                 <h1>PATH</h1>
-                <p>✧ ВЫЖИВАНИЕ НАЧИНАЕТСЯ ✧</p>
+                <!-- Подзаголовок удален -->
             </div>
             
             <!-- Кнопка с картинкой -->
             <div class="start-button-container" onclick="startGame()">
                 <img src="assets/start-button.png" alt="Начать игру" class="start-button-image">
-                <div class="button-glow"></div>
             </div>
             
-            <div class="version">
-                PRE-ALPHA • v0.1.0
-            </div>
+            <!-- Версия удалена -->
         </div>
     </div>
 
@@ -245,12 +190,9 @@
         tg.expand();
         tg.ready();
         
-        // Тактильный отклик (для мобильных)
         function startGame() {
-            // Вибрация/тактильный отклик
+            // Тактильный отклик
             tg.HapticFeedback.impactOccurred('heavy');
-            
-            // Можно добавить звук (если будет)
             
             // Отправляем событие в бот
             tg.sendData(JSON.stringify({
@@ -258,20 +200,17 @@
                 timestamp: Date.now()
             }));
             
-            // Переходим в игру с небольшой задержкой для анимации
+            // Переходим в игру
             setTimeout(() => {
                 window.location.href = 'game.html';
             }, 200);
         }
         
-        // Предзагрузка game.html для плавности
+        // Предзагрузка game.html
         const preloadLink = document.createElement('link');
         preloadLink.rel = 'prefetch';
         preloadLink.href = 'game.html';
         document.head.appendChild(preloadLink);
-        
-        // Скрываем основную кнопку Telegram
-        tg.MainButton.hide();
     </script>
 </body>
 </html>

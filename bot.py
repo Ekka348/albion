@@ -16,7 +16,125 @@ PORT = int(os.getenv('PORT', 8080))
 
 # Настройки (замени на свои!)
 API_TOKEN = os.getenv('BOT_TOKEN', '8404262144:AAFhLqVbU4FpIrM6KWfU6u9L1l5Qh-FYLWk')
-WEBAPP_URL = os.getenv('WEBAPP_URL', 'https://твой-проект.railway.app')
+WEBAPP_URL = os.getenv('WEBAPP_URL', '<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Пустошь: Бой</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            background: #1a1a1a;
+            color: #fff;
+            font-family: Arial;
+            text-align: center;
+            padding: 20px;
+        }
+        .monster {
+            font-size: 100px;
+            margin: 30px;
+        }
+        .hp-bar {
+            width: 100%;
+            height: 30px;
+            background: #333;
+            border-radius: 15px;
+            margin: 20px 0;
+        }
+        .hp-fill {
+            height: 100%;
+            width: 80%;
+            background: #ff4444;
+            border-radius: 15px;
+            line-height: 30px;
+            color: white;
+        }
+        button {
+            background: #ff6b00;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 20px;
+            border-radius: 30px;
+            margin: 10px;
+            cursor: pointer;
+        }
+        button:active {
+            background: #ff4500;
+        }
+        .log {
+            background: #333;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🐗 МУТИРОВАННЫЙ КАБАН</h1>
+    <div class="hp-bar">
+        <div class="hp-fill" id="monsterHpBar">80%</div>
+    </div>
+    <div class="monster">🐗</div>
+    <button onclick="attack()">⚔️ АТАКОВАТЬ</button>
+    <div class="log" id="log">Нажми атаку, чтобы начать бой!</div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.ready();
+
+        let monsterHp = 80;
+        let playerHp = 100;
+        const maxMonsterHp = 80;
+
+        function updateDisplay() {
+            const percent = (monsterHp / maxMonsterHp) * 100;
+            document.getElementById('monsterHpBar').style.width = percent + '%';
+            document.getElementById('monsterHpBar').innerText = Math.floor(percent) + '%';
+        }
+
+        function attack() {
+            if (monsterHp <= 0) {
+                document.getElementById('log').innerHTML = '💀 Монстр уже мертв! Начни новый бой.';
+                return;
+            }
+
+            // Урон игрока
+            const damage = Math.floor(Math.random() * 20) + 10;
+            monsterHp -= damage;
+            
+            // Урон монстра
+            const monsterDamage = Math.floor(Math.random() * 15) + 5;
+            playerHp -= monsterDamage;
+
+            // Лог
+            const log = document.getElementById('log');
+            log.innerHTML = `⚔️ Ты нанес ${damage} урона!<br>`;
+            log.innerHTML += `🐗 Кабан ударил на ${monsterDamage}!<br>`;
+            
+            if (monsterHp <= 0) {
+                log.innerHTML += '🎉 ПОБЕДА! Монстр повержен!';
+                monsterHp = 0;
+            } else if (playerHp <= 0) {
+                log.innerHTML += '💀 Ты погиб...';
+            } else {
+                log.innerHTML += `❤️ Твое HP: ${playerHp}`;
+            }
+
+            updateDisplay();
+
+            // Отправляем боту
+            tg.sendData(JSON.stringify({
+                monsterHp: monsterHp,
+                playerHp: playerHp
+            }));
+        }
+
+        updateDisplay();
+    </script>
+</body>
+</html>')
 
 print(f"🆔 Запуск инстанса: {INSTANCE_ID}")
 print(f"🚀 Порт: {PORT}")
@@ -137,3 +255,4 @@ if __name__ == '__main__':
         print("👋 Бот остановлен")
     except Exception as e:
         print(f"❌ Критическая ошибка: {e}")
+

@@ -13,22 +13,75 @@ API_TOKEN = os.getenv('BOT_TOKEN', '8404262144:AAFhLqVbU4FpIrM6KWfU6u9L1l5Qh-FYL
 WEBAPP_URL = os.getenv('WEBAPP_URL', 'https://albion-production.up.railway.app')
 PORT = int(os.getenv('PORT', 8080))
 
-print(f"🆔 Запуск с портом {PORT}")
+print(f"🆔 Запуск Endless Path")
 print(f"🌐 Mini App URL: {WEBAPP_URL}")
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
 
-user_sessions = {}
-
-# ---------- HTTP сервер для Mini App ----------
+# ----- HTTP сервер для отдачи файлов -----
 async def handle_index(request):
+    """Главная страница меню"""
     try:
         with open('index.html', 'r', encoding='utf-8') as f:
             content = f.read()
         return web.Response(text=content, content_type='text/html')
     except FileNotFoundError:
         return web.Response(text="<h1>index.html не найден</h1>", content_type='text/html', status=404)
+    except Exception as e:
+        return web.Response(text=f"<h1>Ошибка: {e}</h1>", content_type='text/html', status=500)
+
+async def handle_game(request):
+    """Страница игры"""
+    try:
+        with open('game.html', 'r', encoding='utf-8') as f:
+            content = f.read()
+        return web.Response(text=content, content_type='text/html')
+    except FileNotFoundError:
+        # Если game.html нет, показываем заглушку
+        return web.Response(text="""
+            <!DOCTYPE html>
+            <html>
+            <head><title>Игра</title></head>
+            <body style="background:#1a1a2e; color:white; text-align:center; padding:50px;">
+                <h1>⚔️ Игра загружается ⚔️</h1>
+                <p>Скоро здесь будет бой с кабаном!</p>
+                <button onclick="window.location.href='/'" style="padding:15px 30px; background:#ff6b00; color:white; border:none; border-radius:10px;">В меню</button>
+            </body>
+            </html>
+        """, content_type='text/html')
+
+async def handle_assets(request):
+    """Отдача картинок из папки assets"""
+    filename = request.match_info['filename']
+    file_path = os.path.join('assets', filename)
+    
+    print(f"📸 Запрос картинки: {filename}")
+    print(f"📁 Путь: {file_path}")
+    print(f"📂 Существует? {os.path.exists(file_path)}")
+    
+    try:
+        if not os.path.exists(file_path):
+            print(f"❌ Файл не найден: {file_path}")
+            return web.Response(status=404)
+        
+        with open(file_path, 'rb') as f:
+            content = f.read()
+        
+        # Определяем тип файла
+        if filename.endswith(('.jpg', '.jpeg')):
+            content_type = 'image/jpeg'
+        elif filename.endswith('.png'):
+            content_type = 'image/png'
+        else:
+            content_type = 'application/octet-stream'
+        
+        print(f"✅ Отдаю {filename}, размер: {len(content)} байт")
+        return web.Response(body=content, content_type=content_type)
+    
+    except Exception as e:
+        print(f"❌ Ошибка при отдаче {filename}: {e}")
+        return web.Response(status=500)
 
 async def handle_health(request):
     return web.Response(text="OK", status=200)
@@ -36,6 +89,8 @@ async def handle_health(request):
 async def run_http_server():
     app = web.Application()
     app.router.add_get('/', handle_index)
+    app.router.add_get('/game', handle_game)
+    app.router.add_get('/assets/{filename}', handle_assets)
     app.router.add_get('/health', handle_health)
     
     runner = web.AppRunner(app)
@@ -44,17 +99,19 @@ async def run_http_server():
     await site.start()
     print(f"✅ HTTP сервер запущен на порту {PORT}")
 
-# ---------- Команды бота ----------
+# ----- Команды бота -----
 @dp.message(Command('start'))
 async def cmd_start(message: types.Message):
     builder = InlineKeyboardBuilder()
     builder.add(InlineKeyboardButton(
-        text="🐗 БИТЬ КАБАНА",
+        text="🌟 Войти в Endless Path",
         web_app=types.WebAppInfo(url=WEBAPP_URL)
     ))
     
     await message.answer(
-        "🔥 Нажимай кнопку и бей кабана!",
+        "🌟 **Endless Path**\n\n"
+        "Пустошь ждет своего героя. Готов ли ты вступить на бесконечный путь?\n\n"
+        "👇 Нажми кнопку ниже, чтобы начать",
         reply_markup=builder.as_markup()
     )
 
@@ -68,27 +125,18 @@ async def handle_web_app_data(message: types.Message):
         data = json.loads(message.web_app_data.data)
         user_id = message.from_user.id
         
-        user_sessions[user_id] = {
-            'player_hp': data.get('player_hp', 100),
-            'monster_hp': data.get('monster_hp', 100)
-        }
+        if data.get('action') == 'start_game':
+            await message.answer("⚔️ Удачи в бою!")
         
-        await message.answer(
-            f"⚔️ Результат:\n"
-            f"❤️ Ты: {user_sessions[user_id]['player_hp']} HP\n"
-            f"🐗 Кабан: {user_sessions[user_id]['monster_hp']} HP"
-        )
+        await message.answer(f"⚔️ Данные получены")
     except Exception as e:
         await message.answer(f"❌ Ошибка: {e}")
 
-# ---------- Запуск ----------
 async def main():
     logging.basicConfig(level=logging.INFO)
     
-    # Запускаем HTTP сервер
     await run_http_server()
     
-    # Запускаем бота
     print("🚀 Запуск бота...")
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)

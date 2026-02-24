@@ -8,21 +8,267 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
+from enum import Enum
 
 # ============= НАСТРОЙКИ =============
 API_TOKEN = os.getenv('BOT_TOKEN', '8404262144:AAFhLqVbU4FpIrM6KWfU6u9L1l5Qh-FYLWk')
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# ============= КЛАССЫ =============
+# ============= ТИПЫ ПРЕДМЕТОВ =============
 
-class Weapon:
-    def __init__(self, name, damage, accuracy, crit_chance, crit_multiplier):
+class ItemRarity(Enum):
+    NORMAL = "normal"
+    MAGIC = "magic"
+    RARE = "rare"
+    UNIQUE = "unique"
+
+class ItemType(Enum):
+    WEAPON = "weapon"
+    HELMET = "helmet"
+    ARMOR = "armor"
+    GLOVES = "gloves"
+    BOOTS = "boots"
+    BELT = "belt"
+    RING = "ring"
+    AMULET = "amulet"
+    FLASK = "flask"
+
+class AffixType(Enum):
+    PREFIX = "prefix"
+    SUFFIX = "suffix"
+
+# ============= АФФИКСЫ (МОДИФИКАТОРЫ) =============
+
+PREFIXES = {
+    # Оружие
+    "weapon_damage": {"name": "Закаленное", "stat": "damage", "value": (2, 5), "tier": 1},
+    "weapon_damage2": {"name": "Острое", "stat": "damage", "value": (5, 9), "tier": 2},
+    "weapon_damage3": {"name": "Убийственное", "stat": "damage", "value": (9, 14), "tier": 3},
+    
+    # Здоровье
+    "health": {"name": "Здоровое", "stat": "max_hp", "value": (10, 20), "tier": 1},
+    "health2": {"name": "Крепкое", "stat": "max_hp", "value": (20, 35), "tier": 2},
+    "health3": {"name": "Могучая", "stat": "max_hp", "value": (35, 50), "tier": 3},
+    
+    # Защита
+    "defense": {"name": "Прочное", "stat": "defense", "value": (2, 4), "tier": 1},
+    "defense2": {"name": "Твердое", "stat": "defense", "value": (4, 7), "tier": 2},
+    "defense3": {"name": "Несокрушимое", "stat": "defense", "value": (7, 11), "tier": 3},
+    
+    # Скорость атаки
+    "attack_speed": {"name": "Быстрое", "stat": "attack_speed", "value": (5, 10), "tier": 1},
+    "attack_speed2": {"name": "Проворное", "stat": "attack_speed", "value": (10, 15), "tier": 2},
+    "attack_speed3": {"name": "Вихревое", "stat": "attack_speed", "value": (15, 22), "tier": 3},
+    
+    # Точность
+    "accuracy": {"name": "Точное", "stat": "accuracy", "value": (5, 10), "tier": 1},
+    "accuracy2": {"name": "Меткое", "stat": "accuracy", "value": (10, 16), "tier": 2},
+    "accuracy3": {"name": "Снайперское", "stat": "accuracy", "value": (16, 24), "tier": 3},
+}
+
+SUFFIXES = {
+    # Шанс крита
+    "crit_chance": {"name": "Удачи", "stat": "crit_chance", "value": (3, 6), "tier": 1},
+    "crit_chance2": {"name": "Везучего", "stat": "crit_chance", "value": (6, 10), "tier": 2},
+    "crit_chance3": {"name": "Рока", "stat": "crit_chance", "value": (10, 15), "tier": 3},
+    
+    # Множитель крита
+    "crit_mult": {"name": "Боли", "stat": "crit_multiplier", "value": (10, 20), "tier": 1},
+    "crit_mult2": {"name": "Агонии", "stat": "crit_multiplier", "value": (20, 30), "tier": 2},
+    "crit_mult3": {"name": "Экзекуции", "stat": "crit_multiplier", "value": (30, 45), "tier": 3},
+    
+    # Регенерация
+    "life_regen": {"name": "Жизни", "stat": "life_regen", "value": (2, 4), "tier": 1},
+    "life_regen2": {"name": "Возрождения", "stat": "life_regen", "value": (4, 7), "tier": 2},
+    "life_regen3": {"name": "Бессмертия", "stat": "life_regen", "value": (7, 11), "tier": 3},
+    
+    # Сопротивления
+    "fire_res": {"name": "Пламени", "stat": "fire_res", "value": (5, 10), "tier": 1},
+    "cold_res": {"name": "Льда", "stat": "cold_res", "value": (5, 10), "tier": 1},
+    "lightning_res": {"name": "Молнии", "stat": "lightning_res", "value": (5, 10), "tier": 1},
+}
+
+# ============= БУТЫЛКИ (ФЛАСКИ) =============
+
+FLASKS = {
+    "small_life": {
+        "name": "Малая бутылка здоровья",
+        "emoji": "🧪",
+        "heal": 30,
+        "uses": 3,
+        "rarity": ItemRarity.NORMAL
+    },
+    "medium_life": {
+        "name": "Средняя бутылка здоровья",
+        "emoji": "🧪✨",
+        "heal": 50,
+        "uses": 4,
+        "rarity": ItemRarity.MAGIC
+    },
+    "large_life": {
+        "name": "Большая бутылка здоровья",
+        "emoji": "🧪🌟",
+        "heal": 80,
+        "uses": 5,
+        "rarity": ItemRarity.RARE
+    },
+    "divine_life": {
+        "name": "Божественная бутылка",
+        "emoji": "🧪💫",
+        "heal": 120,
+        "uses": 6,
+        "instant_heal": 50,
+        "rarity": ItemRarity.UNIQUE
+    }
+}
+
+# ============= КЛАССЫ ПРЕДМЕТОВ =============
+
+class Item:
+    def __init__(self, name, item_type, rarity=ItemRarity.NORMAL):
         self.name = name
-        self.damage = damage
-        self.accuracy = accuracy
-        self.crit_chance = crit_chance
-        self.crit_multiplier = crit_multiplier
+        self.item_type = item_type
+        self.rarity = rarity
+        self.emoji = self._get_emoji()
+        self.affixes = []
+        self.stats = {}
+        self.flask_data = None
+        
+    def _get_emoji(self):
+        emoji_map = {
+            ItemType.WEAPON: "⚔️",
+            ItemType.HELMET: "⛑️",
+            ItemType.ARMOR: "🛡️",
+            ItemType.GLOVES: "🧤",
+            ItemType.BOOTS: "👢",
+            ItemType.BELT: "🔗",
+            ItemType.RING: "💍",
+            ItemType.AMULET: "📿",
+            ItemType.FLASK: "🧪"
+        }
+        return emoji_map.get(self.item_type, "📦")
+    
+    def add_affix(self, affix_data, affix_type):
+        self.affixes.append((affix_type, affix_data))
+        value = random.randint(affix_data["value"][0], affix_data["value"][1])
+        self.stats[affix_data["stat"]] = self.stats.get(affix_data["stat"], 0) + value
+    
+    def get_name_colored(self):
+        colors = {
+            ItemRarity.NORMAL: "",
+            ItemRarity.MAGIC: "🟣 ",
+            ItemRarity.RARE: "🟡 ",
+            ItemRarity.UNIQUE: "🔴 "
+        }
+        return f"{colors[self.rarity]}{self.emoji} {self.name}"
+    
+    def get_stats_text(self):
+        lines = []
+        for stat, value in self.stats.items():
+            stat_names = {
+                "damage": "⚔️ Урон",
+                "max_hp": "❤️ Здоровье",
+                "defense": "🛡️ Защита",
+                "attack_speed": "⚡ Скорость атаки",
+                "accuracy": "🎯 Точность",
+                "crit_chance": "🔥 Шанс крита",
+                "crit_multiplier": "💥 Множитель крита",
+                "life_regen": "🌿 Регенерация",
+                "fire_res": "🔥 Сопротивление огню",
+                "cold_res": "❄️ Сопротивление холоду",
+                "lightning_res": "⚡ Сопротивление молнии"
+            }
+            lines.append(f"{stat_names.get(stat, stat)}: +{value}%")
+        return "\n".join(lines)
+
+class Flask(Item):
+    def __init__(self, flask_type):
+        flask_data = FLASKS[flask_type]
+        super().__init__(flask_data["name"], ItemType.FLASK, flask_data["rarity"])
+        self.flask_data = flask_data
+        self.current_uses = flask_data["uses"]
+        
+    def use(self):
+        if self.current_uses > 0:
+            self.current_uses -= 1
+            heal = self.flask_data.get("instant_heal", self.flask_data["heal"])
+            return heal
+        return 0
+
+# ============= ИГРОК =============
+
+class Player:
+    def __init__(self):
+        self.hp = 100
+        self.max_hp = 100
+        self.defense = 0
+        self.damage = 5
+        self.accuracy = 75
+        self.crit_chance = 5
+        self.crit_multiplier = 150
+        self.attack_speed = 100
+        self.life_regen = 0
+        
+        self.exp = 0
+        self.level = 1
+        self.gold = 0
+        
+        # Инвентарь
+        self.inventory = []
+        self.equipped = {
+            ItemType.WEAPON: None,
+            ItemType.HELMET: None,
+            ItemType.ARMOR: None,
+            ItemType.GLOVES: None,
+            ItemType.BOOTS: None,
+            ItemType.BELT: None,
+            ItemType.RING: None,
+            ItemType.AMULET: None
+        }
+        
+        # Фласки
+        self.flasks = []
+        self.active_flask = None
+        self.current_floor = 1
+        self.max_floor = 10
+        
+        # Даем стартовую фласку
+        starter_flask = Flask("small_life")
+        self.flasks.append(starter_flask)
+        self.active_flask = 0
+    
+    def apply_item_stats(self, item):
+        for stat, value in item.stats.items():
+            if hasattr(self, stat):
+                setattr(self, stat, getattr(self, stat) + value)
+    
+    def remove_item_stats(self, item):
+        for stat, value in item.stats.items():
+            if hasattr(self, stat):
+                setattr(self, stat, getattr(self, stat) - value)
+    
+    def equip(self, item, slot):
+        if self.equipped[slot]:
+            self.remove_item_stats(self.equipped[slot])
+            self.inventory.append(self.equipped[slot])
+        
+        self.equipped[slot] = item
+        self.apply_item_stats(item)
+        if item in self.inventory:
+            self.inventory.remove(item)
+    
+    def get_total_damage(self):
+        return int(self.damage * (self.attack_speed / 100))
+    
+    def regen_tick(self):
+        if self.life_regen > 0 and self.hp < self.max_hp:
+            regen = max(1, int(self.max_hp * self.life_regen / 100))
+            self.hp = min(self.max_hp, self.hp + regen)
+            return regen
+        return 0
+
+# ============= КЛАССЫ =============
 
 class Enemy:
     def __init__(self, name, hp, damage, accuracy, defense, exp, emoji, rarity):
@@ -35,20 +281,6 @@ class Enemy:
         self.exp = exp
         self.emoji = emoji
         self.rarity = rarity
-
-class Player:
-    def __init__(self):
-        self.hp = 100
-        self.max_hp = 100
-        self.defense = 5
-        self.damage_bonus = 0
-        self.exp = 0
-        self.level = 1
-        self.gold = 0
-        self.inventory = {"аптечка": 3}
-        self.buffs = []
-        self.current_floor = 1
-        self.max_floor = 10
 
 # ============= ПУЛ ПРОТИВНИКОВ =============
 
@@ -63,16 +295,6 @@ COMMON_ENEMIES = [
     {"name": "Крокодил", "hp": 45, "damage": (8,16), "accuracy": 55, "defense": 5, "exp": 28, "emoji": "🐊"},
     {"name": "Скорпион", "hp": 32, "damage": (7,13), "accuracy": 65, "defense": 4, "exp": 26, "emoji": "🦂"},
     {"name": "Змея", "hp": 27, "damage": (9,15), "accuracy": 75, "defense": 1, "exp": 27, "emoji": "🐍"},
-    {"name": "Ящер", "hp": 42, "damage": (6,12), "accuracy": 60, "defense": 6, "exp": 25, "emoji": "🦎"},
-    {"name": "Крыса", "hp": 20, "damage": (4,8), "accuracy": 70, "defense": 1, "exp": 15, "emoji": "🐀"},
-    {"name": "Гарпия", "hp": 33, "damage": (7,14), "accuracy": 75, "defense": 2, "exp": 24, "emoji": "🦅"},
-    {"name": "Муравей", "hp": 28, "damage": (5,10), "accuracy": 65, "defense": 5, "exp": 19, "emoji": "🐜"},
-    {"name": "Комар", "hp": 18, "damage": (4,7), "accuracy": 85, "defense": 0, "exp": 14, "emoji": "🦟"},
-    {"name": "Жук", "hp": 30, "damage": (5,11), "accuracy": 60, "defense": 7, "exp": 21, "emoji": "🐞"},
-    {"name": "Кузнечик", "hp": 23, "damage": (5,9), "accuracy": 80, "defense": 2, "exp": 17, "emoji": "🦗"},
-    {"name": "Гусеница", "hp": 25, "damage": (4,8), "accuracy": 55, "defense": 3, "exp": 16, "emoji": "🐛"},
-    {"name": "Мотылек", "hp": 21, "damage": (5,10), "accuracy": 75, "defense": 1, "exp": 18, "emoji": "🦋"},
-    {"name": "Слизень", "hp": 35, "damage": (3,7), "accuracy": 50, "defense": 8, "exp": 20, "emoji": "🐌"}
 ]
 
 MAGIC_ENEMIES = [
@@ -81,35 +303,18 @@ MAGIC_ENEMIES = [
     {"name": "Огненный паук", "hp": 45, "damage": (12,18), "accuracy": 75, "defense": 3, "exp": 45, "emoji": "🕷️🔥"},
     {"name": "Ледяной скелет", "hp": 48, "damage": (9,15), "accuracy": 68, "defense": 6, "exp": 44, "emoji": "💀❄️"},
     {"name": "Теневой волк", "hp": 52, "damage": (11,17), "accuracy": 72, "defense": 4, "exp": 43, "emoji": "🐺🌑"},
-    {"name": "Ядовитая змея", "hp": 40, "damage": (13,19), "accuracy": 80, "defense": 2, "exp": 46, "emoji": "🐍☠️"},
-    {"name": "Каменный голем", "hp": 70, "damage": (7,13), "accuracy": 55, "defense": 10, "exp": 48, "emoji": "🪨"},
-    {"name": "Водяной дух", "hp": 38, "damage": (14,20), "accuracy": 85, "defense": 2, "exp": 47, "emoji": "💧👻"},
-    {"name": "Ветряная гарпия", "hp": 42, "damage": (12,18), "accuracy": 78, "defense": 3, "exp": 45, "emoji": "🦅🌪️"},
-    {"name": "Земляной жук", "hp": 60, "damage": (8,14), "accuracy": 60, "defense": 8, "exp": 41, "emoji": "🐜⛰️"}
 ]
 
 RARE_ENEMIES = [
     {"name": "Культист смерти", "hp": 80, "damage": (15,25), "accuracy": 75, "defense": 8, "exp": 80, "emoji": "🧙💀"},
     {"name": "Демонический берсерк", "hp": 95, "damage": (18,28), "accuracy": 70, "defense": 10, "exp": 85, "emoji": "👹⚔️"},
     {"name": "Древний голем", "hp": 120, "damage": (12,22), "accuracy": 60, "defense": 15, "exp": 90, "emoji": "🗿"},
-    {"name": "Королева пауков", "hp": 85, "damage": (16,26), "accuracy": 80, "defense": 7, "exp": 88, "emoji": "🕷️👑"},
-    {"name": "Призрачный лорд", "hp": 70, "damage": (20,30), "accuracy": 85, "defense": 5, "exp": 95, "emoji": "👻👑"}
-]
-
-EPIC_ENEMIES = [
-    {"name": "Дракон", "hp": 150, "damage": (22,35), "accuracy": 75, "defense": 12, "exp": 150, "emoji": "🐲"}
-]
-
-LEGENDARY_ENEMIES = [
-    {"name": "Древний дракон", "hp": 250, "damage": (30,50), "accuracy": 85, "defense": 18, "exp": 300, "emoji": "🐉✨"}
 ]
 
 BOSS_ENEMIES = [
     {"name": "Повелитель тьмы", "hp": 200, "damage": (25,40), "accuracy": 80, "defense": 15, "exp": 200, "emoji": "👹🔥"},
     {"name": "Архимаг", "hp": 180, "damage": (28,45), "accuracy": 90, "defense": 10, "exp": 220, "emoji": "🧙‍♂️✨"},
     {"name": "Король демонов", "hp": 220, "damage": (26,42), "accuracy": 75, "defense": 18, "exp": 250, "emoji": "👑👹"},
-    {"name": "Саркофаг", "hp": 240, "damage": (24,38), "accuracy": 70, "defense": 20, "exp": 230, "emoji": "🦴🐉"},
-    {"name": "Древний ужас", "hp": 210, "damage": (27,44), "accuracy": 82, "defense": 14, "exp": 240, "emoji": "👾💀"}
 ]
 
 # ============= ПУЛ СОБЫТИЙ =============
@@ -118,109 +323,154 @@ EVENT_POOL = [
     {"type": "chest", "name": "Обычный сундук", "emoji": "📦", "rarity": "common", "chance": 40},
     {"type": "chest", "name": "Магический сундук", "emoji": "📦✨", "rarity": "magic", "chance": 20},
     {"type": "chest", "name": "Редкий сундук", "emoji": "📦🌟", "rarity": "rare", "chance": 10},
-    {"type": "altar", "name": "Алтарь силы", "emoji": "⚔️", "effect": "damage", "value": 3, "chance": 8, "desc": "+3 к урону"},
-    {"type": "altar", "name": "Алтарь здоровья", "emoji": "❤️", "effect": "hp", "value": 20, "chance": 8, "desc": "+20 HP"},
-    {"type": "altar", "name": "Алтарь защиты", "emoji": "🛡️", "effect": "defense", "value": 3, "chance": 8, "desc": "+3 к защите"},
-    {"type": "altar", "name": "Алтарь золота", "emoji": "💰", "effect": "gold", "value": 60, "chance": 8, "desc": "+60 золота"},
-    {"type": "rest", "name": "Место отдыха", "emoji": "🔥", "heal": 30, "chance": 12, "desc": "+30 HP"},
-    {"type": "trap", "name": "Ловушка", "emoji": "⚠️", "damage": 20, "chance": 12, "desc": "-20 HP"},
-    {"type": "merchant", "name": "Торговец", "emoji": "🛒", "chance": 4, "desc": "Можно купить предметы"}
+    {"type": "rest", "name": "Место отдыха", "emoji": "🔥", "heal": 30, "chance": 20, "desc": "+30 HP"},
+    {"type": "trap", "name": "Ловушка", "emoji": "⚠️", "damage": 20, "chance": 10, "desc": "-20 HP"},
 ]
 
-# ============= СИСТЕМА ЛУТА (PoE-стиль) =============
+# ============= СИСТЕМА ГЕНЕРАЦИИ ПРЕДМЕТОВ =============
 
-# Базовые шансы выпадения для разных редкостей монстров
-LOOT_BASE_CHANCE = {
-    "common": 15,    # 15% базовый шанс
-    "magic": 30,     # 30%
-    "rare": 50,      # 50%
-    "epic": 75,      # 75%
-    "legendary": 100, # 100%
-    "boss": 100      # 100%
-}
+def generate_item(enemy_rarity):
+    """Генерирует предмет экипировки на основе редкости врага"""
+    
+    # Определяем базовый шанс выпадения
+    drop_chance = {
+        "common": 10,
+        "magic": 25,
+        "rare": 50,
+        "epic": 75,
+        "legendary": 90,
+        "boss": 100
+    }.get(enemy_rarity, 10)
+    
+    if random.randint(1, 100) > drop_chance:
+        return None
+    
+    # Определяем тип предмета
+    item_type = random.choice([
+        ItemType.WEAPON, ItemType.HELMET, ItemType.ARMOR, 
+        ItemType.GLOVES, ItemType.BOOTS, ItemType.BELT,
+        ItemType.RING, ItemType.AMULET
+    ])
+    
+    # Определяем редкость предмета
+    rarity_roll = random.random() * 100
+    
+    if rarity_roll < 60:
+        item_rarity = ItemRarity.NORMAL
+    elif rarity_roll < 85:
+        item_rarity = ItemRarity.MAGIC
+    elif rarity_roll < 98:
+        item_rarity = ItemRarity.RARE
+    else:
+        item_rarity = ItemRarity.UNIQUE
+    
+    # Базовое имя
+    base_names = {
+        ItemType.WEAPON: "Оружие",
+        ItemType.HELMET: "Шлем",
+        ItemType.ARMOR: "Броня",
+        ItemType.GLOVES: "Перчатки",
+        ItemType.BOOTS: "Сапоги",
+        ItemType.BELT: "Пояс",
+        ItemType.RING: "Кольцо",
+        ItemType.AMULET: "Амулет"
+    }
+    
+    item = Item(base_names[item_type], item_type, item_rarity)
+    
+    # Добавляем аффиксы в зависимости от редкости
+    if item_rarity == ItemRarity.MAGIC:
+        # Магические: 1 префикс или 1 суффикс
+        if random.choice([True, False]):
+            affix = random.choice(list(PREFIXES.values()))
+            item.add_affix(affix, AffixType.PREFIX)
+        else:
+            affix = random.choice(list(SUFFIXES.values()))
+            item.add_affix(affix, AffixType.SUFFIX)
+            
+    elif item_rarity == ItemRarity.RARE:
+        # Редкие: 2-3 аффикса (могут быть и префиксы и суффиксы)
+        num_affixes = random.randint(2, 3)
+        for _ in range(num_affixes):
+            if random.choice([True, False]):
+                affix = random.choice(list(PREFIXES.values()))
+            else:
+                affix = random.choice(list(SUFFIXES.values()))
+            item.add_affix(affix, random.choice([AffixType.PREFIX, AffixType.SUFFIX]))
+            
+    elif item_rarity == ItemRarity.UNIQUE:
+        # Уникальные: 3-4 сильных аффикса
+        num_affixes = random.randint(3, 4)
+        for _ in range(num_affixes):
+            # Берем аффиксы высокого тира
+            high_tier_affixes = [a for a in list(PREFIXES.values()) + list(SUFFIXES.values()) 
+                                if a["tier"] >= 2]
+            affix = random.choice(high_tier_affixes)
+            item.add_affix(affix, random.choice([AffixType.PREFIX, AffixType.SUFFIX]))
+    
+    # Генерируем имя на основе аффиксов
+    if item.affixes:
+        prefixes = [a for t, a in item.affixes if t == AffixType.PREFIX]
+        suffixes = [a for t, a in item.affixes if t == AffixType.SUFFIX]
+        
+        name_parts = []
+        if prefixes:
+            name_parts.append(random.choice(prefixes)["name"])
+        name_parts.append(base_names[item_type])
+        if suffixes:
+            name_parts.append(random.choice(suffixes)["name"])
+        
+        item.name = " ".join(name_parts)
+    
+    return item
 
-# Множители количества предметов
-LOOT_QUANTITY_MULTIPLIER = {
-    "common": 1,
-    "magic": 2,
-    "rare": 3,
-    "epic": 4,
-    "legendary": 5,
-    "boss": 6
-}
-
-# Таблица лута с весами (как в PoE)
-LOOT_TABLE = {
-    "gold": {"name": "Золото", "emoji": "💰", "weight": 100, "min": 5, "max": 20},
-    "аптечка": {"name": "Аптечка", "emoji": "💊", "weight": 80, "min": 1, "max": 2},
-    "зелье маны": {"name": "Зелье маны", "emoji": "🧪", "weight": 70, "min": 1, "max": 2},
-    "свиток": {"name": "Свиток", "emoji": "📜", "weight": 60, "min": 1, "max": 3},
-    "ключ": {"name": "Ключ", "emoji": "🔑", "weight": 40, "min": 1, "max": 1},
-    "самоцвет": {"name": "Самоцвет", "emoji": "💎", "weight": 25, "min": 1, "max": 1},
-    "кристалл": {"name": "Кристалл", "emoji": "🔮", "weight": 15, "min": 1, "max": 1},
-    "артефакт": {"name": "Артефакт", "emoji": "🏆", "weight": 5, "min": 1, "max": 1}
-}
+def generate_flask():
+    """Генерирует бутылку здоровья"""
+    flask_type = random.choice(list(FLASKS.keys()))
+    return Flask(flask_type)
 
 def generate_loot(enemy_rarity):
-    """Генерирует лут для монстра определенной редкости"""
+    """Генерирует полный лут с врага"""
     loot = []
     
-    # 1. Проверяем базовый шанс выпадения
-    if random.randint(1, 100) > LOOT_BASE_CHANCE[enemy_rarity]:
-        return loot
+    # Шанс на предмет экипировки
+    item = generate_item(enemy_rarity)
+    if item:
+        loot.append(item)
     
-    # 2. Определяем количество предметов
-    quantity_mult = LOOT_QUANTITY_MULTIPLIER[enemy_rarity]
-    base_count = random.randint(1, 3)
-    total_items = base_count * quantity_mult
+    # Шанс на фласку
+    if random.randint(1, 100) <= 20:  # 20% шанс на фласку
+        loot.append(generate_flask())
     
-    # 3. Генерируем предметы с учетом весов
-    total_weight = sum(item["weight"] for item in LOOT_TABLE.values())
+    # Золото
+    gold_base = {
+        "common": 10,
+        "magic": 25,
+        "rare": 50,
+        "epic": 100,
+        "legendary": 200,
+        "boss": 300
+    }.get(enemy_rarity, 10)
     
-    for _ in range(total_items):
-        roll = random.randint(1, total_weight)
-        current = 0
-        
-        for item_key, item_data in LOOT_TABLE.items():
-            current += item_data["weight"]
-            if roll <= current:
-                amount = random.randint(item_data["min"], item_data["max"])
-                loot.append({
-                    "name": item_data["name"],
-                    "emoji": item_data["emoji"],
-                    "amount": amount
-                })
-                break
+    gold = random.randint(gold_base, gold_base * 2)
+    loot.append({"type": "gold", "amount": gold})
     
     return loot
 
 # ============= GACHA СИСТЕМА =============
 
 def roll_enemy():
-    """Роляет случайного врага с обновленными шансами"""
+    """Роляет случайного врага"""
     roll = random.random() * 100
     
     if roll < 70:  # 70% обычные
         return random.choice(COMMON_ENEMIES), "common"
-    elif roll < 95:  # 25% магические (70+25=95)
+    elif roll < 95:  # 25% магические
         return random.choice(MAGIC_ENEMIES), "magic"
-    elif roll < 98:  # 3% редкие (95+3=98)
+    elif roll < 99:  # 4% редкие
         return random.choice(RARE_ENEMIES), "rare"
-    elif roll < 99.9:  # 1.9% эпические (98+1.9=99.9)
-        return random.choice(EPIC_ENEMIES), "epic"
-    else:  # 0.1% легендарные
-        return random.choice(LEGENDARY_ENEMIES), "legendary"
-
-def roll_event():
-    """Роляет случайное событие"""
-    roll = random.random() * 100
-    
-    for event in EVENT_POOL:
-        if roll < event["chance"]:
-            return event
-        roll -= event["chance"]
-    
-    return {"type": "empty", "name": "Пустота", "emoji": "⬜"}
+    else:  # 1% эпические
+        return random.choice(BOSS_ENEMIES), "epic"
 
 def generate_floor(floor_num):
     """Генерирует событие для конкретного этажа"""
@@ -244,7 +494,7 @@ def generate_floor(floor_num):
                 "rarity": rarity
             }
         else:
-            event = roll_event()
+            event = random.choice(EVENT_POOL)
             return {
                 "type": event["type"],
                 "event": event,
@@ -252,60 +502,34 @@ def generate_floor(floor_num):
                 "emoji": event["emoji"]
             }
 
-# ============= ВИЗУАЛИЗАЦИЯ =============
-
-def format_dungeon_view(player, current_event):
-    """Форматирует вид подземелья"""
-    lines = []
-    
-    # Верхняя стена
-    lines.append("🟫🟫🟫🟫🟫🟫")
-    lines.append("")
-    
-    # Ряд с игроком и монстром
-    if current_event and current_event["type"] in ["battle", "boss"]:
-        enemy_emoji = current_event["emoji"]
-        spaces = " " * (20 - len(enemy_emoji))
-        lines.append(f"👨‍🦱{spaces}{enemy_emoji}")
-    else:
-        lines.append("👨‍🦱")
-    
-    lines.append("")
-    
-    # Нижняя стена
-    lines.append("🟫🟫🟫🟫🟫🟫")
-    
-    return "\n".join(lines)
-
-# ============= ФУНКЦИИ =============
-
-def generate_dungeon():
-    """Генерирует подземелье из 10 этажей"""
-    floors = []
-    for i in range(1, 11):
-        floor = generate_floor(i)
-        floors.append(floor)
-    return floors
-
-# ============= ЭКРАН ПОДЗЕМЕЛЬЯ =============
+# ============= ОСНОВНЫЕ ФУНКЦИИ =============
 
 async def show_dungeon(message: types.Message, state: FSMContext):
     """Показывает текущее состояние подземелья"""
     data = await state.get_data()
     
     if not data or 'floors' not in data:
-        floors = generate_dungeon()
+        floors = [generate_floor(i) for i in range(1, 11)]
         player = Player()
-        await state.update_data(
-            player=player,
-            floors=floors
-        )
+        await state.update_data(player=player, floors=floors)
     else:
         player = data['player']
         floors = data['floors']
     
+    # Регенерация
+    regen = player.regen_tick()
+    
     current_event = floors[player.current_floor - 1]
-    dungeon_view = format_dungeon_view(player, current_event)
+    
+    # Визуализация подземелья
+    dungeon_view = f"""
+🟫🟫🟫🟫🟫🟫
+
+👨‍🦱
+{current_event['emoji']} 
+
+🟫🟫🟫🟫🟫🟫
+"""
     
     # Информация о текущем этаже
     floor_info = f"📍 **Этаж {player.current_floor}/10**\n\n"
@@ -315,35 +539,33 @@ async def show_dungeon(message: types.Message, state: FSMContext):
         rarity_text = {
             "common": "🟢 Обычный",
             "magic": "🟣 Магический",
-            "rare": "🔵 Редкий",
-            "epic": "🟡 Эпический",
-            "legendary": "🔴 Легендарный",
+            "rare": "🟡 Редкий",
+            "epic": "🔴 Эпический",
             "boss": "⚫ БОСС"
         }.get(current_event.get("rarity"), "")
         floor_info += f"**{enemy['emoji']} {enemy['name']}**\n{rarity_text}\n❤️ HP: {enemy['hp']}"
     else:
         event = current_event["event"]
         floor_info += f"**{event['emoji']} {event['name']}**"
-        if event["type"] == "altar":
-            floor_info += f"\n{event.get('desc', '')}"
-        elif event["type"] == "trap":
-            floor_info += f"\n⚠️ Потеряешь {event['damage']} HP"
-        elif event["type"] == "rest":
-            floor_info += f"\n🔥 Восстановит {event['heal']} HP"
-        elif event["type"] == "merchant":
-            floor_info += f"\n{event.get('desc', '')}"
     
     # Статус игрока
-    buffs_text = ""
-    if player.buffs:
-        buffs_text = "\n✨ Баффы: " + ", ".join(player.buffs)
+    flask_status = ""
+    if player.flasks and player.active_flask is not None:
+        flask = player.flasks[player.active_flask]
+        flask_status = f"\n🧪 {flask.name}: {flask.current_uses}/{flask.flask_data['uses']}"
+    
+    regen_text = f"\n🌿 +{regen} HP" if regen > 0 else ""
     
     player_status = (
-        f"\n\n👤 **{player.hp}/{player.max_hp} HP** | Ур. {player.level}\n"
-        f"⚔️ Бонус: +{player.damage_bonus} | 🛡️ Защита: {player.defense}\n"
-        f"💰 {player.gold} золота | Аптечек: {player.inventory['аптечка']}\n"
+        f"\n\n👤 **Уровень {player.level}**\n"
+        f"❤️ {player.hp}/{player.max_hp} HP{regen_text}\n"
+        f"⚔️ Урон: {player.get_total_damage()}\n"
+        f"🛡️ Защита: {player.defense}\n"
+        f"🎯 Точность: {player.accuracy}%\n"
+        f"🔥 Крит: {player.crit_chance}% x{player.crit_multiplier}%\n"
+        f"💰 Золото: {player.gold}\n"
         f"✨ Опыт: {player.exp}/{player.level * 100}"
-        f"{buffs_text}"
+        f"{flask_status}"
     )
     
     text = f"{dungeon_view}\n\n{floor_info}{player_status}"
@@ -355,22 +577,21 @@ async def show_dungeon(message: types.Message, state: FSMContext):
         buttons.append([InlineKeyboardButton(text="⚔️ Вступить в бой", callback_data="start_battle")])
     elif current_event["type"] == "chest":
         buttons.append([InlineKeyboardButton(text="📦 Открыть сундук", callback_data="open_chest")])
-    elif current_event["type"] == "altar":
-        buttons.append([InlineKeyboardButton(text="🕯️ Использовать алтарь", callback_data="use_altar")])
     elif current_event["type"] == "rest":
         buttons.append([InlineKeyboardButton(text="🔥 Отдохнуть", callback_data="take_rest")])
     elif current_event["type"] == "trap":
         buttons.append([InlineKeyboardButton(text="⚠️ Пройти ловушку", callback_data="trigger_trap")])
-    elif current_event["type"] == "merchant":
-        buttons.append([InlineKeyboardButton(text="🛒 Поговорить", callback_data="merchant")])
     
     if player.current_floor < player.max_floor:
         buttons.append([InlineKeyboardButton(text="⬇️ Спуститься ниже", callback_data="next_floor")])
     
     buttons.append([
         InlineKeyboardButton(text="🎒 Инвентарь", callback_data="show_inventory"),
-        InlineKeyboardButton(text="📊 Статистика", callback_data="show_stats")
+        InlineKeyboardButton(text="📊 Экипировка", callback_data="show_equipment")
     ])
+    
+    if player.flasks:
+        buttons.append([InlineKeyboardButton(text="🧪 Использовать фласку", callback_data="use_flask")])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     await state.update_data(player=player, floors=floors)
@@ -429,9 +650,8 @@ async def show_battle(message: types.Message, state: FSMContext):
     rarity_color = {
         "common": "🟢",
         "magic": "🟣",
-        "rare": "🔵",
-        "epic": "🟡",
-        "legendary": "🔴",
+        "rare": "🟡",
+        "epic": "🔴",
         "boss": "⚫"
     }.get(enemy.rarity, "")
     
@@ -441,13 +661,14 @@ async def show_battle(message: types.Message, state: FSMContext):
         f"❤️ HP: {enemy.hp}/{enemy.max_hp}\n\n"
         f"👤 **Ты**\n"
         f"❤️ {player.hp}/{player.max_hp} HP\n"
-        f"⚔️ Бонус: +{player.damage_bonus}\n\n"
+        f"⚔️ Урон: {player.get_total_damage()}\n"
+        f"🎯 Точность: {player.accuracy}%\n\n"
         f"Твой ход:"
     )
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔪 Атаковать", callback_data="battle_attack")],
-        [InlineKeyboardButton(text="💊 Лечиться", callback_data="battle_heal")],
+        [InlineKeyboardButton(text="🧪 Использовать фласку", callback_data="battle_flask")],
         [InlineKeyboardButton(text="🏃 Убежать", callback_data="battle_run")]
     ])
     
@@ -464,42 +685,50 @@ async def battle_action(callback: types.CallbackQuery, state: FSMContext):
     result = []
     
     if action == "attack":
-        if random.randint(1, 100) <= 75:
-            base_damage = random.randint(5, 12)
-            total_damage = base_damage + player.damage_bonus
+        # Проверка на попадание
+        if random.randint(1, 100) <= player.accuracy:
+            # Базовый урон
+            base_damage = player.get_total_damage()
             
-            if random.randint(1, 100) <= 10:
-                total_damage = int(total_damage * 2)
+            # Проверка на крит
+            is_crit = random.randint(1, 100) <= player.crit_chance
+            if is_crit:
+                total_damage = int(base_damage * (player.crit_multiplier / 100))
                 result.append(f"🔥 КРИТ! {total_damage} урона")
             else:
+                total_damage = base_damage
                 result.append(f"⚔️ {total_damage} урона")
-            enemy.hp -= total_damage
+            
+            # Учитываем защиту врага
+            damage_reduction = max(0, enemy.defense - player.defense) // 2
+            final_damage = max(1, total_damage - damage_reduction)
+            enemy.hp -= final_damage
         else:
             result.append("😫 Промах!")
         
+        # Ответная атака врага
         if enemy.hp > 0:
             if random.randint(1, 100) <= enemy.accuracy:
                 enemy_damage = random.randint(enemy.damage[0], enemy.damage[1])
-                enemy_damage = max(1, enemy_damage - player.defense // 2)
-                player.hp -= enemy_damage
-                result.append(f"💥 {enemy.name} атакует: {enemy_damage} урона")
+                # Учитываем защиту игрока
+                damage_block = max(0, player.defense) // 3
+                final_enemy_damage = max(1, enemy_damage - damage_block)
+                player.hp -= final_enemy_damage
+                result.append(f"💥 {enemy.name} атакует: {final_enemy_damage} урона")
             else:
                 result.append(f"🙏 {enemy.name} промахнулся")
     
-    elif action == "heal":
-        if player.inventory["аптечка"] > 0:
-            heal = random.randint(15, 25)
-            player.hp = min(player.max_hp, player.hp + heal)
-            player.inventory["аптечка"] -= 1
-            result.append(f"💊 +{heal} HP")
-            
-            if random.randint(1, 100) <= enemy.accuracy:
-                enemy_damage = random.randint(enemy.damage[0], enemy.damage[1])
-                enemy_damage = max(1, enemy_damage - player.defense // 2)
-                player.hp -= enemy_damage
-                result.append(f"💥 {enemy.name} атакует: {enemy_damage} урона")
+    elif action == "flask":
+        if player.flasks and player.active_flask is not None:
+            flask = player.flasks[player.active_flask]
+            heal = flask.use()
+            if heal > 0:
+                player.hp = min(player.max_hp, player.hp + heal)
+                result.append(f"🧪 Фласка: +{heal} HP (осталось {flask.current_uses})")
+            else:
+                result.append("❌ Фласка пуста!")
         else:
-            result.append("❌ Нет аптечек!")
+            result.append("❌ Нет фласок!")
     
     elif action == "run":
         if random.random() < 0.5:
@@ -517,7 +746,7 @@ async def battle_action(callback: types.CallbackQuery, state: FSMContext):
     
     if enemy.hp <= 0:
         player.exp += enemy.exp
-        if player.exp >= player.level * 100:
+        while player.exp >= player.level * 100:
             player.level += 1
             player.max_hp += 10
             player.hp = player.max_hp
@@ -526,21 +755,19 @@ async def battle_action(callback: types.CallbackQuery, state: FSMContext):
         # Генерируем лут
         loot_items = generate_loot(enemy.rarity)
         
-        gold_total = 0
         loot_text = []
+        gold_total = 0
         
         for item in loot_items:
-            if item["name"] == "Золото":
-                gold_total += item["amount"] * random.randint(1, 3)
-            else:
-                player.inventory[item["name"]] = player.inventory.get(item["name"], 0) + item["amount"]
-                loot_text.append(f"{item['emoji']} {item['name']} x{item['amount']}")
-        
-        player.gold += gold_total
+            if isinstance(item, dict) and item["type"] == "gold":
+                gold_total += item["amount"]
+                player.gold += item["amount"]
+                loot_text.append(f"💰 {item['amount']} золота")
+            elif isinstance(item, Item):
+                player.inventory.append(item)
+                loot_text.append(item.get_name_colored())
         
         result.append(f"\n💰 **Добыча:**")
-        if gold_total > 0:
-            result.append(f"   💰 {gold_total} золота")
         for text in loot_text:
             result.append(f"   {text}")
         
@@ -574,12 +801,134 @@ async def battle_action(callback: types.CallbackQuery, state: FSMContext):
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔪 Атаковать", callback_data="battle_attack")],
-        [InlineKeyboardButton(text="💊 Лечиться", callback_data="battle_heal")],
+        [InlineKeyboardButton(text="🧪 Фласка", callback_data="battle_flask")],
         [InlineKeyboardButton(text="🏃 Убежать", callback_data="battle_run")]
     ])
     
     await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
+
+# ============= ИНВЕНТАРЬ И ЭКИПИРОВКА =============
+
+@dp.callback_query(lambda c: c.data == "show_inventory")
+async def show_inventory(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    player = data['player']
+    
+    if not player.inventory:
+        text = "🎒 **ИНВЕНТАРЬ ПУСТ**"
+    else:
+        inv_lines = []
+        for i, item in enumerate(player.inventory):
+            inv_lines.append(f"{i+1}. {item.get_name_colored()}")
+        text = "🎒 **ИНВЕНТАРЬ**\n\n" + "\n".join(inv_lines)
+    
+    text += f"\n\n💰 Золото: {player.gold}"
+    
+    keyboard_buttons = []
+    
+    # Кнопки для экипировки предметов
+    if player.inventory:
+        row = []
+        for i, item in enumerate(player.inventory[:5]):  # Максимум 5 кнопок
+            if item.item_type != ItemType.FLASK:
+                row.append(InlineKeyboardButton(
+                    text=f"⚔️ {i+1}", 
+                    callback_data=f"equip_{i}"
+                ))
+        if row:
+            keyboard_buttons.append(row)
+    
+    keyboard_buttons.append([
+        InlineKeyboardButton(text="📊 Экипировка", callback_data="show_equipment"),
+        InlineKeyboardButton(text="◀ Назад", callback_data="back_to_dungeon")
+    ])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data == "show_equipment")
+async def show_equipment(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    player = data['player']
+    
+    text = "📊 **ЭКИПИРОВКА**\n\n"
+    
+    slot_names = {
+        ItemType.WEAPON: "⚔️ Оружие",
+        ItemType.HELMET: "⛑️ Шлем",
+        ItemType.ARMOR: "🛡️ Броня",
+        ItemType.GLOVES: "🧤 Перчатки",
+        ItemType.BOOTS: "👢 Сапоги",
+        ItemType.BELT: "🔗 Пояс",
+        ItemType.RING: "💍 Кольцо",
+        ItemType.AMULET: "📿 Амулет"
+    }
+    
+    for slot_type, item in player.equipped.items():
+        if item:
+            stats = item.get_stats_text()
+            text += f"{slot_names[slot_type]}: {item.get_name_colored()}\n{stats}\n\n"
+        else:
+            text += f"{slot_names[slot_type]}: Пусто\n\n"
+    
+    text += f"\n📊 **Итоговые статы:**\n"
+    text += f"❤️ HP: {player.hp}/{player.max_hp}\n"
+    text += f"⚔️ Урон: {player.get_total_damage()}\n"
+    text += f"🛡️ Защита: {player.defense}\n"
+    text += f"🎯 Точность: {player.accuracy}%\n"
+    text += f"🔥 Крит: {player.crit_chance}% x{player.crit_multiplier}%"
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎒 Инвентарь", callback_data="show_inventory")],
+        [InlineKeyboardButton(text="◀ Назад", callback_data="back_to_dungeon")]
+    ])
+    
+    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data.startswith('equip_'))
+async def equip_item(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    player = data['player']
+    
+    item_index = int(callback.data.split('_')[1])
+    
+    if item_index < len(player.inventory):
+        item = player.inventory[item_index]
+        
+        if item.item_type == ItemType.FLASK:
+            # Фласки не экипируются так же как другое снаряжение
+            await callback.answer("❌ Фласки используются отдельно!")
+            return
+        
+        # Экипируем предмет
+        player.equip(item, item.item_type)
+        await callback.answer(f"✅ Экипировано: {item.name}")
+    
+    await show_inventory(callback.message, state)
+
+@dp.callback_query(lambda c: c.data == "use_flask")
+async def use_flask(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    player = data['player']
+    
+    if not player.flasks:
+        await callback.answer("❌ Нет фласок!")
+        return
+    
+    flask = player.flasks[player.active_flask]
+    heal = flask.use()
+    
+    if heal > 0:
+        player.hp = min(player.max_hp, player.hp + heal)
+        await callback.answer(f"🧪 Использовано: +{heal} HP")
+    else:
+        await callback.answer("❌ Фласка пуста!")
+    
+    await state.update_data(player=player)
+    await show_dungeon(callback.message, state)
 
 # ============= СОБЫТИЯ =============
 
@@ -597,61 +946,37 @@ async def open_chest(callback: types.CallbackQuery, state: FSMContext):
     
     if event.get("rarity") == "magic":
         gold = random.randint(40, 70)
-        items = ["аптечка", "зелье маны"]
+        # Шанс на предмет
+        if random.random() < 0.3:
+            item = generate_item("magic")
+            if item:
+                items.append(item)
     elif event.get("rarity") == "rare":
         gold = random.randint(70, 120)
-        items = ["аптечка", "зелье маны", "ключ"]
+        if random.random() < 0.6:
+            item = generate_item("rare")
+            if item:
+                items.append(item)
     else:
         gold = random.randint(15, 35)
-        if random.random() < 0.5:
-            items = ["аптечка"]
+        if random.random() < 0.1:
+            item = generate_item("common")
+            if item:
+                items.append(item)
     
     player.gold += gold
-    for item in items:
-        player.inventory[item] = player.inventory.get(item, 0) + 1
     
-    items_text = ", ".join(items) if items else "ничего"
+    items_text = []
+    for item in items:
+        player.inventory.append(item)
+        items_text.append(item.get_name_colored())
+    
+    items_str = "\n".join(items_text) if items_text else "ничего"
+    
     await callback.message.edit_text(
         f"📦 **СУНДУК ОТКРЫТ!**\n\n"
         f"💰 Найдено: {gold} золота\n"
-        f"🎒 Предметы: {items_text}"
-    )
-    
-    await state.update_data(player=player, floors=floors)
-    await asyncio.sleep(2)
-    await show_dungeon(callback.message, state)
-    await callback.answer()
-
-@dp.callback_query(lambda c: c.data == "use_altar")
-async def use_altar(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    player = data['player']
-    floors = data['floors']
-    
-    current_floor = floors[player.current_floor - 1]
-    event = current_floor["event"]
-    
-    effect_text = ""
-    if event["effect"] == "damage":
-        player.damage_bonus += event["value"]
-        player.buffs.append(f"⚔️ Сила +{event['value']}")
-        effect_text = f"⚔️ Твой урон увеличился на {event['value']}!"
-    elif event["effect"] == "hp":
-        player.max_hp += event["value"]
-        player.hp += event["value"]
-        player.buffs.append(f"❤️ Здоровье +{event['value']}")
-        effect_text = f"❤️ Твое здоровье увеличилось на {event['value']}!"
-    elif event["effect"] == "defense":
-        player.defense += event["value"]
-        player.buffs.append(f"🛡️ Защита +{event['value']}")
-        effect_text = f"🛡️ Твоя защита увеличилась на {event['value']}!"
-    elif event["effect"] == "gold":
-        player.gold += event["value"]
-        effect_text = f"💰 Ты нашел {event['value']} золота!"
-    
-    await callback.message.edit_text(
-        f"🕯️ **АЛТАРЬ**\n\n"
-        f"{effect_text}"
+        f"🎒 Предметы:\n{items_str}"
     )
     
     await state.update_data(player=player, floors=floors)
@@ -692,6 +1017,8 @@ async def trigger_trap(callback: types.CallbackQuery, state: FSMContext):
     event = current_floor["event"]
     
     damage = event["damage"]
+    # Защита снижает урон от ловушек
+    damage = max(1, damage - player.defense // 4)
     player.hp -= damage
     
     if player.hp <= 0:
@@ -710,92 +1037,7 @@ async def trigger_trap(callback: types.CallbackQuery, state: FSMContext):
     await show_dungeon(callback.message, state)
     await callback.answer()
 
-@dp.callback_query(lambda c: c.data == "merchant")
-async def merchant(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    player = data['player']
-    
-    text = (
-        f"🛒 **ТОРГОВЕЦ**\n\n"
-        f"👤 Твои деньги: {player.gold} золота\n\n"
-        f"Аптечка - 30💰\n"
-        f"Зелье маны - 25💰\n"
-        f"Свиток - 15💰\n"
-        f"Ключ - 50💰"
-    )
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💊 Купить аптечку", callback_data="buy_heal")],
-        [InlineKeyboardButton(text="🧪 Купить зелье маны", callback_data="buy_mana")],
-        [InlineKeyboardButton(text="📜 Купить свиток", callback_data="buy_scroll")],
-        [InlineKeyboardButton(text="🔑 Купить ключ", callback_data="buy_key")],
-        [InlineKeyboardButton(text="◀ Уйти", callback_data="back_to_dungeon")]
-    ])
-    
-    await callback.message.edit_text(text, reply_markup=keyboard)
-    await callback.answer()
-
-@dp.callback_query(lambda c: c.data.startswith('buy_'))
-async def buy_item(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    player = data['player']
-    
-    item = callback.data.split('_')[1]
-    prices = {"heal": 30, "mana": 25, "scroll": 15, "key": 50}
-    names = {"heal": "Аптечка", "mana": "Зелье маны", "scroll": "Свиток", "key": "Ключ"}
-    
-    if player.gold >= prices[item]:
-        player.gold -= prices[item]
-        player.inventory[names[item]] = player.inventory.get(names[item], 0) + 1
-        await callback.answer(f"✅ Куплено {names[item]}!")
-    else:
-        await callback.answer("❌ Недостаточно золота!")
-    
-    await state.update_data(player=player)
-    await merchant(callback.message, state)
-
-# ============= ИНВЕНТАРЬ И СТАТИСТИКА =============
-
-@dp.callback_query(lambda c: c.data == "show_inventory")
-async def show_inventory(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    player = data['player']
-    
-    inv = "\n".join([f"• {item}: {count}" for item, count in player.inventory.items()])
-    
-    text = f"🎒 **ИНВЕНТАРЬ**\n\n{inv}\n\n💰 Золото: {player.gold}"
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="◀ Назад", callback_data="back_to_dungeon")]
-    ])
-    
-    await callback.message.edit_text(text, reply_markup=keyboard)
-    await callback.answer()
-
-@dp.callback_query(lambda c: c.data == "show_stats")
-async def show_stats(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    player = data['player']
-    
-    buffs = ", ".join(player.buffs) if player.buffs else "нет"
-    
-    text = (
-        f"📊 **СТАТИСТИКА**\n\n"
-        f"👤 Уровень: {player.level}\n"
-        f"✨ Опыт: {player.exp}/{player.level * 100}\n"
-        f"❤️ HP: {player.hp}/{player.max_hp}\n"
-        f"⚔️ Бонус урона: +{player.damage_bonus}\n"
-        f"🛡️ Защита: {player.defense}\n"
-        f"💰 Золото: {player.gold}\n"
-        f"✨ Баффы: {buffs}"
-    )
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="◀ Назад", callback_data="back_to_dungeon")]
-    ])
-    
-    await callback.message.edit_text(text, reply_markup=keyboard)
-    await callback.answer()
+# ============= НАВИГАЦИЯ =============
 
 @dp.callback_query(lambda c: c.data == "back_to_dungeon")
 async def back_to_dungeon(callback: types.CallbackQuery, state: FSMContext):
@@ -806,12 +1048,9 @@ async def back_to_dungeon(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.message(Command('start'))
 async def cmd_start(message: types.Message, state: FSMContext):
-    floors = generate_dungeon()
+    floors = [generate_floor(i) for i in range(1, 11)]
     player = Player()
-    await state.update_data(
-        player=player,
-        floors=floors
-    )
+    await state.update_data(player=player, floors=floors)
     await show_dungeon(message, state)
 
 @dp.message(Command('ping'))
@@ -822,15 +1061,15 @@ async def cmd_ping(message: types.Message):
 
 async def main():
     logging.basicConfig(level=logging.INFO)
-    print("🗺️ Вертикальное подземелье с PoE-лутом запущено!")
+    print("🗺️ Path of Exile Dungeon запущено!")
     print("🟫🟫🟫🟫🟫🟫")
     print("👨‍🦱")
     print("🟫🟫🟫🟫🟫🟫")
-    print("\n🎯 Gacha-система:")
-    print("70% Обычные | 25% Магические | 3% Редкие | 1.9% Эпические | 0.1% Легендарные")
-    print("\n💰 PoE-лут:")
-    print("Шансы выпадения зависят от редкости монстра")
-    print("Редкие монстры дают больше лута!")
+    print("\n🎯 Система лута PoE:")
+    print("- Предметы с аффиксами")
+    print("- Разная редкость (обычные/магические/редкие/уникальные)")
+    print("- Фласки здоровья")
+    print("- Экипировка со статами")
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 

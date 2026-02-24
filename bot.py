@@ -122,7 +122,7 @@ FLASKS = {
     }
 }
 
-# ============= КЛАССЫ ПРЕДМЕТОВ =============
+# ============= КЛАССЫ ПРЕДМЕТОВ (УЛУЧШЕННОЕ ОТОБРАЖЕНИЕ) =============
 
 class Item:
     def __init__(self, name, item_type, rarity=ItemRarity.NORMAL):
@@ -153,32 +153,79 @@ class Item:
         value = random.randint(affix_data["value"][0], affix_data["value"][1])
         self.stats[affix_data["stat"]] = self.stats.get(affix_data["stat"], 0) + value
     
-    def get_name_colored(self):
-        colors = {
-            ItemRarity.NORMAL: "",
-            ItemRarity.MAGIC: "🟣 ",
-            ItemRarity.RARE: "🟡 ",
-            ItemRarity.UNIQUE: "🔴 "
+    def get_rarity_emoji(self):
+        rarity_emojis = {
+            ItemRarity.NORMAL: "⚪",  # Белый
+            ItemRarity.MAGIC: "🔵",   # Синий
+            ItemRarity.RARE: "🟡",     # Желтый
+            ItemRarity.UNIQUE: "🔴"    # Красный
         }
-        return f"{colors[self.rarity]}{self.emoji} {self.name}"
+        return rarity_emojis.get(self.rarity, "⚪")
     
-    def get_stats_text(self):
+    def get_rarity_name(self):
+        rarity_names = {
+            ItemRarity.NORMAL: "Обычный",
+            ItemRarity.MAGIC: "Магический",
+            ItemRarity.RARE: "Редкий",
+            ItemRarity.UNIQUE: "Уникальный"
+        }
+        return rarity_names.get(self.rarity, "Обычный")
+    
+    def get_type_name(self):
+        type_names = {
+            ItemType.WEAPON: "Оружие",
+            ItemType.HELMET: "Шлем",
+            ItemType.ARMOR: "Броня",
+            ItemType.GLOVES: "Перчатки",
+            ItemType.BOOTS: "Сапоги",
+            ItemType.BELT: "Пояс",
+            ItemType.RING: "Кольцо",
+            ItemType.AMULET: "Амулет",
+            ItemType.FLASK: "Фласка"
+        }
+        return type_names.get(self.item_type, "Предмет")
+    
+    def get_name_colored(self):
+        """Короткое отображение для инвентаря"""
+        return f"{self.get_rarity_emoji()}{self.emoji} {self.name}"
+    
+    def get_detailed_info(self):
+        """Подробное отображение со всеми параметрами"""
         lines = []
-        for stat, value in self.stats.items():
-            stat_names = {
-                "damage": "⚔️ Урон",
-                "max_hp": "❤️ Здоровье",
-                "defense": "🛡️ Защита",
-                "attack_speed": "⚡ Скорость атаки",
-                "accuracy": "🎯 Точность",
-                "crit_chance": "🔥 Шанс крита",
-                "crit_multiplier": "💥 Множитель крита",
-                "life_regen": "🌿 Регенерация",
-                "fire_res": "🔥 Сопротивление огню",
-                "cold_res": "❄️ Сопротивление холоду",
-                "lightning_res": "⚡ Сопротивление молнии"
-            }
-            lines.append(f"{stat_names.get(stat, stat)}: +{value}")
+        
+        # Заголовок с редкостью и типом
+        lines.append(f"{self.get_rarity_emoji()} **{self.name}**")
+        lines.append(f"└ {self.get_rarity_name()} {self.emoji} {self.get_type_name()}")
+        lines.append("")
+        
+        # Аффиксы (префиксы и суффиксы)
+        if self.affixes:
+            lines.append("**Модификаторы:**")
+            for affix_type, affix_data in self.affixes:
+                prefix_suffix = "🔺 Префикс" if affix_type == AffixType.PREFIX else "🔻 Суффикс"
+                value = self.stats.get(affix_data["stat"], 0)
+                
+                # Красивое название стата
+                stat_names = {
+                    "damage": "⚔️ Урон",
+                    "max_hp": "❤️ Здоровье",
+                    "defense": "🛡️ Защита",
+                    "attack_speed": "⚡ Скорость атаки",
+                    "accuracy": "🎯 Точность",
+                    "crit_chance": "🔥 Шанс крита",
+                    "crit_multiplier": "💥 Множитель крита",
+                    "life_regen": "🌿 Регенерация",
+                    "fire_res": "🔥 Сопротивление огню",
+                    "cold_res": "❄️ Сопротивление холоду",
+                    "lightning_res": "⚡ Сопротивление молнии"
+                }
+                
+                stat_name = stat_names.get(affix_data["stat"], affix_data["stat"])
+                lines.append(f"  {prefix_suffix}: {affix_data['name']}")
+                lines.append(f"    {stat_name}: +{value}")
+        else:
+            lines.append("**Модификаторы:** Отсутствуют")
+        
         return "\n".join(lines)
 
 class Flask(Item):
@@ -195,9 +242,32 @@ class Flask(Item):
             return self.flask_data["heal"]
         return 0
     
+    def get_detailed_info(self):
+        """Подробное отображение фласки"""
+        lines = []
+        
+        # Заголовок с редкостью
+        lines.append(f"{self.get_rarity_emoji()} **{self.name}**")
+        lines.append(f"└ {self.get_rarity_name()} {self.emoji} Фласка")
+        lines.append("")
+        
+        # Параметры фласки
+        lines.append("**Параметры:**")
+        
+        # Цвет лечения в зависимости от величины
+        heal_emoji = "💚" if self.flask_data["heal"] < 50 else "💛" if self.flask_data["heal"] < 100 else "❤️"
+        lines.append(f"  {heal_emoji} Лечение: +{self.flask_data['heal']} HP")
+        
+        # Заряды
+        charges_emoji = "🔋" * self.current_uses + "⚪" * (self.flask_data["uses"] - self.current_uses)
+        lines.append(f"  {charges_emoji} Заряды: {self.current_uses}/{self.flask_data['uses']}")
+        
+        return "\n".join(lines)
+    
     def get_status(self):
-        """Возвращает статус фласки"""
-        return f"{self.get_name_colored()} [{self.current_uses}/{self.flask_data['uses']}]"
+        """Короткий статус для боя"""
+        charges = "█" * self.current_uses + "░" * (self.flask_data["uses"] - self.current_uses)
+        return f"{self.get_rarity_emoji()}{self.emoji} {self.flask_data['heal']}HP [{charges}]"
 
 # ============= ИГРОК =============
 
@@ -578,7 +648,7 @@ async def show_dungeon(message: types.Message, state: FSMContext):
     if player.flasks:
         for i, flask in enumerate(player.flasks):
             marker = "👉" if i == player.active_flask else "  "
-            flask_status.append(f"{marker} {flask.get_name_colored()} [{flask.current_uses}/{flask.flask_data['uses']}]")
+            flask_status.append(f"{marker} {flask.get_status()}")
     flask_text = "\n".join(flask_status) if flask_status else "Нет фласок"
     
     player_status = (
@@ -680,12 +750,12 @@ async def show_battle(message: types.Message, state: FSMContext):
         "boss": "⚫"
     }.get(enemy.rarity, "")
     
-    # Статус фласок
+    # Статус фласок с красивым отображением
     flask_status = []
     if player.flasks:
         for i, flask in enumerate(player.flasks):
             marker = "👉" if i == player.active_flask else "  "
-            flask_status.append(f"{marker} {flask.get_name_colored()} [{flask.current_uses}/{flask.flask_data['uses']}]")
+            flask_status.append(f"{marker} {flask.get_status()}")
     flask_text = "\n".join(flask_status) if flask_status else "Нет фласок"
     
     text = (
@@ -819,11 +889,11 @@ async def battle_action(callback: types.CallbackQuery, state: FSMContext):
                 if item.item_type == ItemType.FLASK:
                     if len(player.flasks) < player.max_flasks:
                         player.flasks.append(item)
-                        loot_text.append(f"🧪 Новая фласка: {item.name}")
+                        loot_text.append(f"🧪 Новая фласка: {item.get_name_colored()} [{item.current_uses}/{item.flask_data['uses']}]")
                     else:
-                        # Если уже 3 фласки, предлагаем заменить
+                        # Если уже 3 фласки, в инвентарь
                         player.inventory.append(item)
-                        loot_text.append(f"🧪 {item.name} (в инвентаре, максимум фласок достигнут)")
+                        loot_text.append(f"🧪 {item.get_name_colored()} (в инвентаре)")
                 else:
                     player.inventory.append(item)
                     loot_text.append(item.get_name_colored())
@@ -855,7 +925,7 @@ async def battle_action(callback: types.CallbackQuery, state: FSMContext):
     if player.flasks:
         for i, flask in enumerate(player.flasks):
             marker = "👉" if i == player.active_flask else "  "
-            flask_status.append(f"{marker} {flask.get_name_colored()} [{flask.current_uses}/{flask.flask_data['uses']}]")
+            flask_status.append(f"{marker} {flask.get_status()}")
     flask_text = "\n".join(flask_status) if flask_status else "Нет фласок"
     
     text = (
@@ -994,24 +1064,42 @@ async def show_inventory(callback: types.CallbackQuery, state: FSMContext):
     if not player.inventory:
         text = "🎒 **ИНВЕНТАРЬ ПУСТ**"
     else:
-        inv_lines = []
-        for i, item in enumerate(player.inventory):
-            inv_lines.append(f"{i+1}. {item.get_name_colored()}")
-        text = "🎒 **ИНВЕНТАРЬ**\n\n" + "\n".join(inv_lines)
+        text = "🎒 **ИНВЕНТАРЬ**\n\n"
+        
+        # Группируем предметы по типу
+        equipment = []
+        flasks = []
+        
+        for item in player.inventory:
+            if item.item_type == ItemType.FLASK:
+                flasks.append(item)
+            else:
+                equipment.append(item)
+        
+        # Сначала экипировка
+        if equipment:
+            text += "**⚔️ Экипировка:**\n"
+            for i, item in enumerate(equipment):
+                text += f"{i+1}. {item.get_name_colored()}\n"
+        
+        # Потом фласки
+        if flasks:
+            text += "\n**🧪 Фласки:**\n"
+            for i, item in enumerate(flasks, start=len(equipment)):
+                text += f"{i+1}. {item.get_name_colored()} [{item.current_uses}/{item.flask_data['uses']}]\n"
     
-    text += f"\n\n💰 Золото: {player.gold}"
+    text += f"\n💰 Золото: {player.gold}"
     
+    # Кнопки для просмотра деталей
     keyboard_buttons = []
-    
-    # Кнопки для экипировки предметов
     if player.inventory:
+        # Кнопки для просмотра каждого предмета
         row = []
-        for i, item in enumerate(player.inventory[:5]):
-            if item.item_type != ItemType.FLASK:
-                row.append(InlineKeyboardButton(
-                    text=f"⚔️ {i+1}", 
-                    callback_data=f"equip_{i}"
-                ))
+        for i, item in enumerate(player.inventory[:5]):  # Максимум 5 кнопок
+            row.append(InlineKeyboardButton(
+                text=f"🔍 {i+1}", 
+                callback_data=f"inspect_{i}"
+            ))
         if row:
             keyboard_buttons.append(row)
     
@@ -1023,6 +1111,57 @@ async def show_inventory(callback: types.CallbackQuery, state: FSMContext):
     keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
     await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
+
+@dp.callback_query(lambda c: c.data.startswith('inspect_'))
+async def inspect_item(callback: types.CallbackQuery, state: FSMContext):
+    """Просмотр детальной информации о предмете"""
+    data = await state.get_data()
+    player = data['player']
+    
+    item_index = int(callback.data.split('_')[1])
+    
+    if item_index < len(player.inventory):
+        item = player.inventory[item_index]
+        
+        text = item.get_detailed_info()
+        
+        # Кнопки действий
+        keyboard_buttons = []
+        
+        if item.item_type != ItemType.FLASK:
+            keyboard_buttons.append([
+                InlineKeyboardButton(text="⚔️ Экипировать", callback_data=f"equip_from_inspect_{item_index}")
+            ])
+        
+        keyboard_buttons.append([
+            InlineKeyboardButton(text="◀ Назад", callback_data="show_inventory")
+        ])
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data.startswith('equip_from_inspect_'))
+async def equip_from_inspect(callback: types.CallbackQuery, state: FSMContext):
+    """Экипировка из режима просмотра"""
+    data = await state.get_data()
+    player = data['player']
+    
+    item_index = int(callback.data.split('_')[3])
+    
+    if item_index < len(player.inventory):
+        item = player.inventory[item_index]
+        
+        if item.item_type == ItemType.FLASK:
+            await callback.answer("❌ Фласки нельзя экипировать!")
+            return
+        
+        # Экипируем предмет
+        player.equip(item, item.item_type)
+        await callback.answer(f"✅ Экипировано: {item.name}")
+    
+    await show_inventory(callback.message, state)
 
 @dp.callback_query(lambda c: c.data == "show_equipment")
 async def show_equipment(callback: types.CallbackQuery, state: FSMContext):
@@ -1044,12 +1183,28 @@ async def show_equipment(callback: types.CallbackQuery, state: FSMContext):
     
     for slot_type, item in player.equipped.items():
         if item:
-            stats = item.get_stats_text()
-            text += f"{slot_names[slot_type]}: {item.get_name_colored()}\n{stats}\n\n"
+            text += f"**{slot_names[slot_type]}:**\n"
+            text += f"└ {item.get_name_colored()}\n"
+            
+            # Показываем аффиксы
+            for affix_type, affix_data in item.affixes:
+                value = item.stats.get(affix_data["stat"], 0)
+                stat_names = {
+                    "damage": "⚔️ Урон",
+                    "max_hp": "❤️ Здоровье",
+                    "defense": "🛡️ Защита",
+                    "attack_speed": "⚡ Скорость атаки",
+                    "accuracy": "🎯 Точность",
+                    "crit_chance": "🔥 Шанс крита",
+                    "crit_multiplier": "💥 Множитель крита"
+                }
+                stat_name = stat_names.get(affix_data["stat"], affix_data["stat"])
+                text += f"  {affix_data['name']}: {stat_name} +{value}\n"
+            text += "\n"
         else:
-            text += f"{slot_names[slot_type]}: Пусто\n\n"
+            text += f"**{slot_names[slot_type]}:** Пусто\n\n"
     
-    text += f"\n📊 **Итоговые статы:**\n"
+    text += f"\n📊 **ИТОГОВЫЕ СТАТЫ:**\n"
     text += f"❤️ HP: {player.hp}/{player.max_hp}\n"
     text += f"⚔️ Урон: {player.get_total_damage()}\n"
     text += f"🛡️ Защита: {player.defense}\n"
@@ -1063,26 +1218,6 @@ async def show_equipment(callback: types.CallbackQuery, state: FSMContext):
     
     await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
-
-@dp.callback_query(lambda c: c.data.startswith('equip_'))
-async def equip_item(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    player = data['player']
-    
-    item_index = int(callback.data.split('_')[1])
-    
-    if item_index < len(player.inventory):
-        item = player.inventory[item_index]
-        
-        if item.item_type == ItemType.FLASK:
-            await callback.answer("❌ Фласки используются отдельно!")
-            return
-        
-        # Экипируем предмет
-        player.equip(item, item.item_type)
-        await callback.answer(f"✅ Экипировано: {item.name}")
-    
-    await show_inventory(callback.message, state)
 
 @dp.callback_query(lambda c: c.data == "switch_flask")
 async def switch_flask(callback: types.CallbackQuery, state: FSMContext):
@@ -1133,6 +1268,8 @@ async def main():
     print("- Крит: 5% x125%")
     print("- Фласки: 3 заряда, восстанавливаются после убийств")
     print("- Максимум фласок: 3")
+    print("\n📦 **Редкость предметов:**")
+    print("⚪ Обычный | 🔵 Магический | 🟡 Редкий | 🔴 Уникальный")
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 

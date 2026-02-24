@@ -54,7 +54,7 @@ class Player:
         self.gold = 0
         self.inventory = {"аптечка": 3}
         self.current_location = "beach"
-        self.position = 0  # позиция на пляже (0-10)
+        self.position = 0
 
 class Chest:
     def __init__(self, position, loot_table):
@@ -67,11 +67,11 @@ class Chest:
 LOCATIONS = {
     "beach": {
         "name": "🏖️ Проклятый пляж",
-        "description": "Мрачный пляж, усыпанный костями и обломками кораблей. Из воды выползают зомби, а в песке копошатся мутировавшие крабы.",
+        "description": "Мрачный пляж, усыпанный костями и обломками кораблей.",
         "background": "🏝️🌊🌴",
         "enemies": {
             "zombie": Enemy(
-                name="Зомби матрос",
+                name="🧟 Зомби матрос",
                 hp=45,
                 damage=(6, 12),
                 accuracy=65,
@@ -81,7 +81,7 @@ LOCATIONS = {
                 emoji="🧟"
             ),
             "crab": Enemy(
-                name="Мутировавший краб",
+                name="🦀 Мутировавший краб",
                 hp=30,
                 damage=(4, 8),
                 accuracy=70,
@@ -139,43 +139,8 @@ LOOT_TABLES = {
 class GameStates(StatesGroup):
     exploring = State()
     battling = State()
-    chest_opening = State()
 
-# ============= ФУНКЦИИ ЛОКАЦИЙ =============
-
-def get_location_status(player):
-    """Возвращает статус текущей локации"""
-    location = LOCATIONS[player.current_location]
-    pos = player.position
-    
-    # Определяем, что на текущей клетке
-    cell_type = "empty"
-    cell_emoji = "⬜"
-    cell_description = "Пустой участок пляжа"
-    
-    # Проверяем сундуки
-    for chest in location["chests"]:
-        if chest.position == pos and not chest.opened:
-            cell_type = "chest"
-            cell_emoji = "📦"
-            cell_description = "Закрытый сундук"
-            break
-    
-    # Случайная встреча с врагом (кроме клеток с сундуками)
-    if cell_type == "empty" and random.random() < 0.3:  # 30% шанс встретить врага
-        cell_type = "enemy"
-        cell_emoji = "⚠️"
-        cell_description = "Чувствуется опасность..."
-    
-    return {
-        "pos": pos,
-        "max_pos": 10,
-        "cell_type": cell_type,
-        "cell_emoji": cell_emoji,
-        "cell_description": cell_description,
-        "location_name": location["name"],
-        "background": location["background"]
-    }
+# ============= ФУНКЦИИ =============
 
 def generate_loot(table_name):
     """Генерирует лут из таблицы"""
@@ -186,7 +151,6 @@ def generate_loot(table_name):
     for item in table:
         if random.randint(1, 100) <= item["chance"]:
             if item.get("stack", False):
-                # Для стакающихся предметов генерируем количество
                 amount = random.randint(item.get("min", 1), item.get("max", 5))
                 value = item["value"] * amount
                 loot.append({
@@ -196,6 +160,7 @@ def generate_loot(table_name):
                     "emoji": item["emoji"],
                     "rarity": item["rarity"]
                 })
+                total_value += value
             else:
                 loot.append({
                     "name": item["name"],
@@ -204,7 +169,7 @@ def generate_loot(table_name):
                     "emoji": item["emoji"],
                     "rarity": item["rarity"]
                 })
-            total_value += item["value"]
+                total_value += item["value"]
     
     return loot, total_value
 
@@ -213,17 +178,20 @@ def generate_loot(table_name):
 async def show_location(message: types.Message, state: FSMContext):
     """Показывает карту локации"""
     data = await state.get_data()
-    player = data.get('player', Player())
+    if not data or 'player' not in data:
+        player = Player()
+        await state.update_data(player=player)
+    else:
+        player = data['player']
+    
     location = LOCATIONS[player.current_location]
-    status = get_location_status(player)
     
     # Создаем карту пляжа
     map_line = []
     for i in range(11):
-        if i == status["pos"]:
-            map_line.append("🔴")  # Текущая позиция
+        if i == player.position:
+            map_line.append("🔴")
         else:
-            # Проверяем сундуки
             chest_found = False
             for chest in location["chests"]:
                 if chest.position == i and not chest.opened:
@@ -235,43 +203,66 @@ async def show_location(message: types.Message, state: FSMContext):
     
     map_str = "".join(map_line)
     
+    # Определяем, что на текущей клетке
+    cell_info = "Пусто"
+    cell_action = None
+    
+    # Проверяем сундуки
+    for chest in location["chests"]:
+        if chest.position == player.position and not chest.opened:
+            cell_info = "📦 Закрытый сундук"
+            cell_action = "open_chest"
+            break
+    
+    # Если не сундук, проверяем врага (случайно)
+    if not cell_action:
+        # 30% шанс встретить врага на пустой клетке
+        if random.random() < 0.3:
+            enemy_type = random.choice(["zombie", "crab"])
+            enemy = location["enemies"][enemy_type]
+            cell_info = f"⚠️ {enemy.emoji} {enemy.name}"
+            cell_action = "start_battle"
+            # Сохраняем врага для боя
+            await state.update_data(encounter_enemy=enemy_type)
+    
     # Статус игрока
     player_status = (
         f"👤 **{player.hp}/{player.max_hp} HP** | Ур. {player.level}\n"
-        f"💰 {player.gold} золота | 🎒 {len(player.inventory)} пред.\n"
-        f"📊 Опыт: {player.exp}/{(player.level * 100)}"
+        f"💰 {player.gold} золота | Аптечек: {player.inventory.get('аптечка', 0)}\n"
+        f"✨ Опыт: {player.exp}/{player.level * 100}"
     )
     
     text = (
         f"🏖️ **{location['name']}**\n"
         f"{location['background']}\n\n"
         f"{map_str}\n"
-        f"⬜ - пусто | 📦 - сундук | 🔴 - ты\n\n"
-        f"📍 **Текущая позиция:** {status['pos']}/10\n"
-        f"🔍 **Здесь:** {status['cell_emoji']} {status['cell_description']}\n\n"
+        f"⬜ пусто | 📦 сундук | 🔴 ты\n\n"
+        f"📍 **Позиция:** {player.position}/10\n"
+        f"🔍 **Здесь:** {cell_info}\n\n"
         f"{player_status}"
     )
     
-    # Кнопки действий
+    # Кнопки
     buttons = []
     
     # Кнопки перемещения
     move_buttons = []
-    if status["pos"] > 0:
+    if player.position > 0:
         move_buttons.append(InlineKeyboardButton(text="◀ Влево", callback_data="move_left"))
-    if status["pos"] < 10:
+    if player.position < 10:
         move_buttons.append(InlineKeyboardButton(text="Вправо ▶", callback_data="move_right"))
     
     if move_buttons:
         buttons.append(move_buttons)
     
-    # Кнопка действия в зависимости от клетки
-    if status["cell_type"] == "chest":
-        buttons.append([InlineKeyboardButton(text="📦 Открыть сундук", callback_data="open_chest")])
-    elif status["cell_type"] == "enemy":
-        buttons.append([InlineKeyboardButton(text="⚔️ Вступить в бой", callback_data="start_battle")])
+    # Кнопка действия
+    if cell_action:
+        if cell_action == "open_chest":
+            buttons.append([InlineKeyboardButton(text="📦 Открыть сундук", callback_data="open_chest")])
+        elif cell_action == "start_battle":
+            buttons.append([InlineKeyboardButton(text="⚔️ Вступить в бой", callback_data="start_battle")])
     
-    # Кнопки инвентаря и статистики
+    # Кнопки меню
     buttons.append([
         InlineKeyboardButton(text="🎒 Инвентарь", callback_data="show_inventory"),
         InlineKeyboardButton(text="📊 Статистика", callback_data="show_stats")
@@ -279,9 +270,6 @@ async def show_location(message: types.Message, state: FSMContext):
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     
-    await state.update_data(player=player, location_status=status)
-    
-    # Редактируем или отправляем новое сообщение
     try:
         await message.edit_text(text, reply_markup=keyboard)
     except:
@@ -305,37 +293,45 @@ async def move_callback(callback: types.CallbackQuery, state: FSMContext):
 
 # ============= БОЙ =============
 
-async def start_battle(message: types.Message, state: FSMContext):
-    """Начинает бой со случайным врагом"""
+@dp.callback_query(lambda c: c.data == "start_battle")
+async def start_battle(callback: types.CallbackQuery, state: FSMContext):
+    """Начинает бой"""
     data = await state.get_data()
     player = data['player']
     
-    # Выбираем случайного врага (50% зомби, 50% краб)
-    enemy_type = random.choice(["zombie", "crab"])
-    enemy = LOCATIONS["beach"]["enemies"][enemy_type]
+    # Получаем тип врага из сохраненного или выбираем случайно
+    enemy_type = data.get('encounter_enemy', random.choice(["zombie", "crab"]))
+    enemy_data = LOCATIONS["beach"]["enemies"][enemy_type]
     
-    # Копируем врага, чтобы не менять оригинал
+    # Создаем врага для боя
     battle_enemy = Enemy(
-        enemy.name, enemy.hp, enemy.damage,
-        enemy.accuracy, enemy.defense, enemy.exp,
-        enemy.loot_table, enemy.emoji
+        enemy_data.name,
+        enemy_data.hp,
+        enemy_data.damage,
+        enemy_data.accuracy,
+        enemy_data.defense,
+        enemy_data.exp,
+        enemy_data.loot_table,
+        enemy_data.emoji
     )
+    
+    # Простое оружие для теста
+    weapon = Weapon("Пляжный нож", (5, 12), 75, 10, 2.0, 999, 0)
     
     await state.update_data(
         battle_enemy=battle_enemy,
-        battle_round=0
+        battle_weapon=weapon
     )
     
     await show_battle(callback.message, state)
+    await callback.answer()
 
 async def show_battle(message: types.Message, state: FSMContext):
     """Показывает экран боя"""
     data = await state.get_data()
     player = data['player']
     enemy = data['battle_enemy']
-    
-    # Простое оружие для теста
-    weapon = Weapon("Пляжный нож", (5, 12), 75, 10, 2.0, 999, 0)
+    weapon = data['battle_weapon']
     
     text = (
         f"⚔️ **БОЙ!**\n\n"
@@ -353,16 +349,21 @@ async def show_battle(message: types.Message, state: FSMContext):
         [InlineKeyboardButton(text="🏃 Убежать", callback_data="battle_run")]
     ])
     
-    await state.update_data(weapon=weapon)
     await message.edit_text(text, reply_markup=keyboard)
 
 @dp.callback_query(lambda c: c.data.startswith('battle_'))
 async def battle_callback(callback: types.CallbackQuery, state: FSMContext):
     action = callback.data.split('_')[1]
     data = await state.get_data()
+    
+    if 'player' not in data or 'battle_enemy' not in data:
+        await callback.message.edit_text("❌ Бой не найден. Начни заново.")
+        await callback.answer()
+        return
+    
     player = data['player']
     enemy = data['battle_enemy']
-    weapon = data['weapon']
+    weapon = data['battle_weapon']
     
     result = []
     
@@ -383,6 +384,8 @@ async def battle_callback(callback: types.CallbackQuery, state: FSMContext):
         if enemy.hp > 0:
             if random.randint(1, 100) <= enemy.accuracy:
                 enemy_damage = random.randint(enemy.damage[0], enemy.damage[1])
+                # Защита уменьшает урон
+                enemy_damage = max(1, enemy_damage - player.defense // 2)
                 player.hp -= enemy_damage
                 result.append(f"💥 {enemy.name} атакует: {enemy_damage} урона")
             else:
@@ -398,6 +401,7 @@ async def battle_callback(callback: types.CallbackQuery, state: FSMContext):
             # Враг атакует во время лечения
             if random.randint(1, 100) <= enemy.accuracy:
                 enemy_damage = random.randint(enemy.damage[0], enemy.damage[1])
+                enemy_damage = max(1, enemy_damage - player.defense // 2)
                 player.hp -= enemy_damage
                 result.append(f"💥 {enemy.name} атакует: {enemy_damage} урона")
         else:
@@ -405,7 +409,8 @@ async def battle_callback(callback: types.CallbackQuery, state: FSMContext):
     
     elif action == "run":
         if random.random() < 0.6:
-            await callback.message.edit_text("🏃 Ты сбежал с пляжа!")
+            result.append("🏃 Ты сбежал!")
+            await state.update_data(player=player)
             await show_location(callback.message, state)
             await callback.answer()
             return
@@ -414,6 +419,7 @@ async def battle_callback(callback: types.CallbackQuery, state: FSMContext):
             # Враг атакует
             if random.randint(1, 100) <= enemy.accuracy:
                 enemy_damage = random.randint(enemy.damage[0], enemy.damage[1])
+                enemy_damage = max(1, enemy_damage - player.defense // 2)
                 player.hp -= enemy_damage
                 result.append(f"💥 {enemy.name} атакует: {enemy_damage} урона")
     
@@ -421,6 +427,12 @@ async def battle_callback(callback: types.CallbackQuery, state: FSMContext):
     if enemy.hp <= 0:
         # Победа
         player.exp += enemy.exp
+        if player.exp >= player.level * 100:
+            player.level += 1
+            player.max_hp += 10
+            player.hp = player.max_hp
+            result.append(f"✨ **УРОВЕНЬ {player.level}!**")
+        
         loot, gold = generate_loot(enemy.loot_table)
         player.gold += gold
         
@@ -434,7 +446,6 @@ async def battle_callback(callback: types.CallbackQuery, state: FSMContext):
             f"🎒 Добыча:\n{loot_text}"
         )
         
-        # Обновляем игрока и возвращаемся на карту
         await state.update_data(player=player)
         await asyncio.sleep(3)
         await show_location(callback.message, state)
@@ -447,9 +458,10 @@ async def battle_callback(callback: types.CallbackQuery, state: FSMContext):
         await callback.answer()
         return
     
-    # Обновляем состояние и показываем следующий раунд
+    # Обновляем состояние
     await state.update_data(player=player, battle_enemy=enemy)
     
+    # Показываем следующий раунд
     text = (
         f"⚔️ **БОЙ!**\n\n"
         f"{enemy.emoji} **{enemy.name}**\n"

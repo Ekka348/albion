@@ -53,181 +53,180 @@ class Player:
         self.level = 1
         self.gold = 0
         self.inventory = {"аптечка": 3}
-        self.current_location = "beach"
-        self.x = 10  # начальная позиция по центру
-        self.y = 10
+        self.current_location = "dungeon"
+        self.x = 0
+        self.y = 0
 
-class Chest:
-    def __init__(self, x, y, loot_table):
+class Room:
+    def __init__(self, x, y, room_type):
         self.x = x
         self.y = y
-        self.loot_table = loot_table
-        self.opened = False
-
-class MapCell:
-    def __init__(self, x, y, terrain):
-        self.x = x
-        self.y = y
-        self.terrain = terrain  # "sand", "water", "rock", "tree"
-        self.enemy = None
-        self.chest = None
+        self.room_type = room_type  # "corridor", "junction", "dead_end"
+        self.content = None  # None, "enemy", "chest"
+        self.enemy_type = None
+        self.chest_opened = False
         self.explored = False
+        self.connections = []  # список направлений, куда можно идти
 
 # ============= ДАННЫЕ ЛОКАЦИЙ =============
 
-TERRAIN_TYPES = {
-    "sand": {"emoji": "🟨", "name": "песок", "passable": True},
-    "water": {"emoji": "🟦", "name": "вода", "passable": False},
-    "rock": {"emoji": "⛰️", "name": "скала", "passable": False},
-    "tree": {"emoji": "🌲", "name": "дерево", "passable": True},
-    "swamp": {"emoji": "🟫", "name": "болото", "passable": True, "damage": 2}
+ROOM_TYPES = {
+    "corridor": {"emoji": "⬜", "name": "коридор"},
+    "junction": {"emoji": "🟨", "name": "развилка"},
+    "dead_end": {"emoji": "⬛", "name": "тупик"}
 }
 
-BORDER_EMOJIS = ["⛰️", "🌲", "🌴", "🗻", "🏔️"]
-
-LOCATIONS = {
-    "beach": {
-        "name": "🏖️ Дикий пляж",
-        "description": "Огромный пляж, уходящий в глубь острова.",
-        "size": 20,  # 20x20
-        "terrain_weights": {
-            "sand": 50,
-            "water": 15,
-            "rock": 10,
-            "tree": 15,
-            "swamp": 10
-        },
-        "enemies": {
-            "zombie": Enemy(
-                name="🧟 Зомби матрос",
-                hp=45,
-                damage=(6, 12),
-                accuracy=65,
-                defense=2,
-                exp=25,
-                loot_table="zombie",
-                emoji="🧟"
-            ),
-            "crab": Enemy(
-                name="🦀 Мутировавший краб",
-                hp=30,
-                damage=(4, 8),
-                accuracy=70,
-                defense=5,
-                exp=20,
-                loot_table="crab",
-                emoji="🦀"
-            )
-        },
-        "chest_count": 8  # количество сундуков
+ENEMY_TYPES = {
+    "zombie": {
+        "name": "🧟 Зомби",
+        "hp": 45,
+        "damage": (6, 12),
+        "accuracy": 65,
+        "defense": 2,
+        "exp": 25,
+        "emoji": "🧟"
+    },
+    "skeleton": {
+        "name": "💀 Скелет",
+        "hp": 35,
+        "damage": (8, 14),
+        "accuracy": 70,
+        "defense": 3,
+        "exp": 30,
+        "emoji": "💀"
+    },
+    "ghost": {
+        "name": "👻 Призрак",
+        "hp": 25,
+        "damage": (10, 18),
+        "accuracy": 80,
+        "defense": 1,
+        "exp": 35,
+        "emoji": "👻"
+    },
+    "spider": {
+        "name": "🕷️ Паук",
+        "hp": 30,
+        "damage": (5, 10),
+        "accuracy": 75,
+        "defense": 2,
+        "exp": 20,
+        "emoji": "🕷️"
     }
 }
 
 # ============= ТАБЛИЦЫ ЛУТА =============
 
 LOOT_TABLES = {
-    "zombie": [
-        {"name": "Гнилая плоть", "rarity": "common", "value": 5, "emoji": "🧟", "chance": 80, "stack": True},
-        {"name": "Ржавая сабля", "rarity": "common", "value": 8, "emoji": "⚔️", "chance": 40, "stack": False},
-        {"name": "Проржавевший пистолет", "rarity": "rare", "value": 25, "emoji": "🔫", "chance": 20, "stack": False},
-        {"name": "Золотая монета", "rarity": "rare", "value": 15, "emoji": "💰", "chance": 30, "stack": True},
-        {"name": "Амулет капитана", "rarity": "epic", "value": 80, "emoji": "📿", "chance": 8, "stack": False},
-        {"name": "Карта сокровищ", "rarity": "legendary", "value": 200, "emoji": "🗺️", "chance": 2, "stack": False}
+    "enemy": [
+        {"name": "Монеты", "rarity": "common", "value": 10, "emoji": "💰", "chance": 80, "stack": True, "min": 5, "max": 15},
+        {"name": "Кости", "rarity": "common", "value": 5, "emoji": "🦴", "chance": 70, "stack": True},
+        {"name": "Аптечка", "rarity": "common", "value": 15, "emoji": "💊", "chance": 40, "stack": True},
+        {"name": "Ржавый меч", "rarity": "rare", "value": 25, "emoji": "⚔️", "chance": 20, "stack": False},
+        {"name": "Магический кристалл", "rarity": "epic", "value": 80, "emoji": "🔮", "chance": 8, "stack": False},
+        {"name": "Легендарный амулет", "rarity": "legendary", "value": 200, "emoji": "📿", "chance": 2, "stack": False}
     ],
-    "crab": [
-        {"name": "Клешня краба", "rarity": "common", "value": 4, "emoji": "🦀", "chance": 85, "stack": True},
-        {"name": "Кусок панциря", "rarity": "common", "value": 6, "emoji": "🛡️", "chance": 60, "stack": True},
-        {"name": "Черная жемчужина", "rarity": "rare", "value": 30, "emoji": "⚫", "chance": 15, "stack": True},
-        {"name": "Крабовые глаза", "rarity": "epic", "value": 45, "emoji": "👀", "chance": 7, "stack": True},
-        {"name": "Золотой краб", "rarity": "legendary", "value": 300, "emoji": "🦀✨", "chance": 1, "stack": False}
-    ],
-    "beach_chest": [
-        {"name": "Монеты", "rarity": "common", "value": 20, "emoji": "💰", "chance": 90, "stack": True, "min": 5, "max": 20},
-        {"name": "Аптечка", "rarity": "common", "value": 15, "emoji": "💊", "chance": 70, "stack": True},
-        {"name": "Патроны", "rarity": "common", "value": 10, "emoji": "🔫", "chance": 60, "stack": True},
-        {"name": "Старинная монета", "rarity": "rare", "value": 50, "emoji": "🪙", "chance": 30, "stack": True},
-        {"name": "Кинжал русалки", "rarity": "epic", "value": 120, "emoji": "🗡️", "chance": 10, "stack": False},
-        {"name": "Трезубец Посейдона", "rarity": "legendary", "value": 500, "emoji": "🔱", "chance": 2, "stack": False}
+    "chest": [
+        {"name": "Золото", "rarity": "common", "value": 30, "emoji": "💰", "chance": 90, "stack": True, "min": 10, "max": 30},
+        {"name": "Аптечка", "rarity": "common", "value": 20, "emoji": "💊", "chance": 70, "stack": True},
+        {"name": "Зелье лечения", "rarity": "rare", "value": 40, "emoji": "🧪", "chance": 40, "stack": True},
+        {"name": "Кинжал", "rarity": "rare", "value": 35, "emoji": "🗡️", "chance": 25, "stack": False},
+        {"name": "Магический посох", "rarity": "epic", "value": 120, "emoji": "🪄", "chance": 10, "stack": False},
+        {"name": "Драконий глаз", "rarity": "legendary", "value": 500, "emoji": "🐉", "chance": 3, "stack": False}
     ]
 }
 
 # ============= ГЕНЕРАЦИЯ КАРТЫ =============
 
-def generate_map(location_name):
-    """Генерирует случайную карту"""
-    location = LOCATIONS[location_name]
-    size = location["size"]
-    weights = location["terrain_weights"]
+def generate_dungeon():
+    """Генерирует коридорную карту 10x10"""
+    size = 10
+    dungeon = []
     
     # Создаем пустую карту
-    game_map = []
     for y in range(size):
         row = []
         for x in range(size):
-            # Выбираем тип местности по весам
-            terrain = random.choices(
-                list(weights.keys()),
-                weights=list(weights.values())
-            )[0]
-            row.append(MapCell(x, y, terrain))
-        game_map.append(row)
+            row.append(Room(x, y, "corridor"))
+        dungeon.append(row)
     
-    # Добавляем границы (непроходимые)
+    # Генерируем коридоры (основной путь)
     for y in range(size):
         for x in range(size):
-            if x == 0 or x == size-1 or y == 0 or y == size-1:
-                game_map[y][x].terrain = random.choice(["rock", "tree"])
-                game_map[y][x].explored = True  # границы видны всегда
+            # Основной путь - по центру
+            if x == size//2:
+                dungeon[y][x].room_type = "corridor"
+                # Добавляем соединения
+                if y > 0:
+                    dungeon[y][x].connections.append("up")
+                if y < size-1:
+                    dungeon[y][x].connections.append("down")
     
-    # Расставляем сундуки случайно
-    chests = []
-    for _ in range(location["chest_count"]):
-        attempts = 0
-        while attempts < 100:
-            x = random.randint(1, size-2)
-            y = random.randint(1, size-2)
-            # Не ставим сундуки на воду и на границы
-            if game_map[y][x].terrain not in ["water", "rock"] and game_map[y][x].chest is None:
-                chest = Chest(x, y, "beach_chest")
-                game_map[y][x].chest = chest
-                chests.append(chest)
-                break
-            attempts += 1
-    
-    return game_map, chests
-
-def get_visible_area(game_map, player_x, player_y, vision_range=2):
-    """Возвращает видимую область карты"""
-    size = len(game_map)
-    visible = []
-    
-    for y in range(size):
-        row = []
-        for x in range(size):
-            dist = abs(x - player_x) + abs(y - player_y)
-            cell = game_map[y][x]
-            
-            # Отмечаем клетку как исследованную
-            if dist <= vision_range:
-                cell.explored = True
-            
-            # Определяем, что показывать
-            if cell.explored:
-                # Показываем реальный террейн
-                if x == player_x and y == player_y:
-                    row.append("🧍")  # игрок
-                elif cell.chest and not cell.chest.opened:
-                    row.append("📦")  # сундук
-                elif cell.enemy:
-                    row.append(cell.enemy.emoji)  # враг
-                else:
-                    row.append(TERRAIN_TYPES[cell.terrain]["emoji"])
-            else:
-                row.append("⬛")  # неизведанно
+    # Добавляем ответвления (тупики)
+    for y in range(1, size-1, 2):  # Каждый второй ряд
+        # Левое ответвление
+        if random.random() < 0.7:
+            x = size//2 - random.randint(1, 3)
+            if x >= 0:
+                dungeon[y][x].room_type = "dead_end"
+                dungeon[y][x].connections = ["right"]
+                # Соединяем с основным коридором
+                for i in range(x+1, size//2):
+                    dungeon[y][i].room_type = "corridor"
+                    dungeon[y][i].connections = ["left", "right"]
         
-        visible.append(row)
+        # Правое ответвление
+        if random.random() < 0.7:
+            x = size//2 + random.randint(1, 3)
+            if x < size:
+                dungeon[y][x].room_type = "dead_end"
+                dungeon[y][x].connections = ["left"]
+                # Соединяем с основным коридором
+                for i in range(size//2, x):
+                    dungeon[y][i].room_type = "corridor"
+                    dungeon[y][i].connections = ["left", "right"]
     
-    return visible
+    # Добавляем развилки
+    for y in range(2, size-1, 3):
+        if random.random() < 0.5:
+            dungeon[y][size//2].room_type = "junction"
+            # Добавляем дополнительные направления
+            if random.random() < 0.5:
+                dungeon[y][size//2].connections.append("left")
+            if random.random() < 0.5:
+                dungeon[y][size//2].connections.append("right")
+    
+    # Добавляем контент в тупики
+    for y in range(size):
+        for x in range(size):
+            if dungeon[y][x].room_type == "dead_end":
+                # 50% враг, 50% сундук
+                if random.random() < 0.5:
+                    dungeon[y][x].content = "enemy"
+                    dungeon[y][x].enemy_type = random.choice(list(ENEMY_TYPES.keys()))
+                else:
+                    dungeon[y][x].content = "chest"
+    
+    # Стартовая комната
+    dungeon[0][size//2].explored = True
+    
+    return dungeon
+
+def get_room_display(room, player_x, player_y):
+    """Возвращает emoji для отображения комнаты"""
+    if room.x == player_x and room.y == player_y:
+        return "🧍"  # игрок
+    
+    if not room.explored:
+        return "❓"  # неисследовано
+    
+    if room.content == "enemy" and not room.explored:
+        return ENEMY_TYPES[room.enemy_type]["emoji"]
+    
+    if room.content == "chest" and not room.chest_opened:
+        return "📦"
+    
+    return ROOM_TYPES[room.room_type]["emoji"]
 
 # ============= ФУНКЦИИ =============
 
@@ -265,55 +264,58 @@ def generate_loot(table_name):
 # ============= ЭКРАН ЛОКАЦИИ =============
 
 async def show_location(message: types.Message, state: FSMContext):
-    """Показывает карту локации"""
+    """Показывает карту подземелья"""
     data = await state.get_data()
     
-    if not data or 'game_map' not in data:
-        # Генерируем новую карту
-        game_map, chests = generate_map("beach")
+    if not data or 'dungeon' not in data:
+        dungeon = generate_dungeon()
         player = Player()
         await state.update_data(
             player=player,
-            game_map=game_map,
-            chests=chests
+            dungeon=dungeon
         )
     else:
         player = data['player']
-        game_map = data['game_map']
+        dungeon = data['dungeon']
     
-    location = LOCATIONS[player.current_location]
-    visible_map = get_visible_area(game_map, player.x, player.y)
+    size = 10
     
-    # Формируем строки карты
+    # Формируем карту
     map_lines = []
-    for y, row in enumerate(visible_map):
-        # Добавляем границы слева и справа
-        if y == 0 or y == len(visible_map)-1:
-            border = random.choice(BORDER_EMOJIS) * 2
-        else:
-            border = random.choice(BORDER_EMOJIS)
-        
-        line = border + "".join(row) + border
+    for y in range(size):
+        line = ""
+        for x in range(size):
+            line += get_room_display(dungeon[y][x], player.x, player.y)
         map_lines.append(line)
     
     map_str = "\n".join(map_lines)
     
-    # Что на текущей клетке
-    current_cell = game_map[player.y][player.x]
-    cell_info = f"{TERRAIN_TYPES[current_cell.terrain]['emoji']} {TERRAIN_TYPES[current_cell.terrain]['name']}"
-    cell_action = None
+    # Текущая комната
+    current_room = dungeon[player.y][player.x]
+    current_room.explored = True
     
-    if current_cell.chest and not current_cell.chest.opened:
-        cell_info += " + 📦 сундук"
-        cell_action = "open_chest"
+    room_info = f"{ROOM_TYPES[current_room.room_type]['emoji']} {ROOM_TYPES[current_room.room_type]['name']}"
     
-    # Шанс встретить врага
-    if not cell_action and random.random() < 0.2:
-        enemy_type = random.choice(["zombie", "crab"])
-        enemy = location["enemies"][enemy_type]
-        cell_info += f" + ⚠️ {enemy.emoji} {enemy.name}"
-        cell_action = "start_battle"
-        await state.update_data(encounter_enemy=enemy_type)
+    if current_room.content == "enemy" and current_room.enemy_type:
+        enemy = ENEMY_TYPES[current_room.enemy_type]
+        room_info += f"\n👾 Здесь: {enemy['emoji']} {enemy['name']}"
+    elif current_room.content == "chest" and not current_room.chest_opened:
+        room_info += "\n📦 Здесь: закрытый сундук"
+    
+    # Доступные направления
+    available_dirs = []
+    dir_emojis = {
+        "up": "⬆️", "down": "⬇️", "left": "⬅️", "right": "➡️"
+    }
+    
+    if player.y > 0 and dungeon[player.y-1][player.x].room_type != "junction":
+        available_dirs.append("up")
+    if player.y < size-1 and dungeon[player.y+1][player.x].room_type != "junction":
+        available_dirs.append("down")
+    if player.x > 0 and dungeon[player.y][player.x-1].room_type != "junction":
+        available_dirs.append("left")
+    if player.x < size-1 and dungeon[player.y][player.x+1].room_type != "junction":
+        available_dirs.append("right")
     
     # Статус игрока
     player_status = (
@@ -323,55 +325,39 @@ async def show_location(message: types.Message, state: FSMContext):
     )
     
     text = (
-        f"🏝️ **{location['name']}**\n"
-        f"{location['description']}\n\n"
-        f"{map_str}\n"
-        f"🧍 ты | 📦 сундук | ⬛ туман\n\n"
-        f"📍 **Позиция:** ({player.x}, {player.y})\n"
-        f"🔍 **Здесь:** {cell_info}\n\n"
+        f"🏰 **Подземелье**\n"
+        f"❓ - неисследовано | 🧍 - ты\n\n"
+        f"{map_str}\n\n"
+        f"📍 **Комната:** ({player.x}, {player.y})\n"
+        f"{room_info}\n\n"
         f"{player_status}"
     )
     
-    # Кнопки перемещения (8 направлений)
+    # Кнопки перемещения
     buttons = []
     
-    move_row1 = []
-    if player.y > 0:
-        if player.x > 0:
-            move_row1.append(InlineKeyboardButton(text="↖️", callback_data="move_nw"))
-        move_row1.append(InlineKeyboardButton(text="⬆️", callback_data="move_n"))
-        if player.x < location["size"] - 1:
-            move_row1.append(InlineKeyboardButton(text="↗️", callback_data="move_ne"))
+    # Верхний ряд (только вверх)
+    if "up" in available_dirs:
+        buttons.append([InlineKeyboardButton(text="⬆️ Вверх", callback_data="move_up")])
     
-    if move_row1:
-        buttons.append(move_row1)
+    # Средний ряд (влево и вправо)
+    mid_row = []
+    if "left" in available_dirs:
+        mid_row.append(InlineKeyboardButton(text="⬅️ Влево", callback_data="move_left"))
+    if "right" in available_dirs:
+        mid_row.append(InlineKeyboardButton(text="➡️ Вправо", callback_data="move_right"))
+    if mid_row:
+        buttons.append(mid_row)
     
-    move_row2 = []
-    if player.x > 0:
-        move_row2.append(InlineKeyboardButton(text="⬅️", callback_data="move_w"))
-    move_row2.append(InlineKeyboardButton(text="⏺️", callback_data="center"))
-    if player.x < location["size"] - 1:
-        move_row2.append(InlineKeyboardButton(text="➡️", callback_data="move_e"))
-    
-    buttons.append(move_row2)
-    
-    move_row3 = []
-    if player.y < location["size"] - 1:
-        if player.x > 0:
-            move_row3.append(InlineKeyboardButton(text="↙️", callback_data="move_sw"))
-        move_row3.append(InlineKeyboardButton(text="⬇️", callback_data="move_s"))
-        if player.x < location["size"] - 1:
-            move_row3.append(InlineKeyboardButton(text="↘️", callback_data="move_se"))
-    
-    if move_row3:
-        buttons.append(move_row3)
+    # Нижний ряд (только вниз)
+    if "down" in available_dirs:
+        buttons.append([InlineKeyboardButton(text="⬇️ Вниз", callback_data="move_down")])
     
     # Кнопка действия
-    if cell_action:
-        if cell_action == "open_chest":
-            buttons.append([InlineKeyboardButton(text="📦 Открыть сундук", callback_data="open_chest")])
-        elif cell_action == "start_battle":
-            buttons.append([InlineKeyboardButton(text="⚔️ Вступить в бой", callback_data="start_battle")])
+    if current_room.content == "enemy" and current_room.enemy_type:
+        buttons.append([InlineKeyboardButton(text="⚔️ Вступить в бой", callback_data="start_battle")])
+    elif current_room.content == "chest" and not current_room.chest_opened:
+        buttons.append([InlineKeyboardButton(text="📦 Открыть сундук", callback_data="open_chest")])
     
     # Кнопки меню
     buttons.append([
@@ -380,6 +366,8 @@ async def show_location(message: types.Message, state: FSMContext):
     ])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    
+    await state.update_data(player=player, dungeon=dungeon)
     
     try:
         await message.edit_text(text, reply_markup=keyboard)
@@ -392,13 +380,13 @@ async def show_location(message: types.Message, state: FSMContext):
 async def move_callback(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     player = data['player']
-    game_map = data['game_map']
-    location = LOCATIONS[player.current_location]
-    size = location["size"]
+    dungeon = data['dungeon']
     
     dirs = {
-        "n": (0, -1), "s": (0, 1), "w": (-1, 0), "e": (1, 0),
-        "nw": (-1, -1), "ne": (1, -1), "sw": (-1, 1), "se": (1, 1)
+        "up": (0, -1),
+        "down": (0, 1),
+        "left": (-1, 0),
+        "right": (1, 0)
     }
     
     move_dir = callback.data.split('_')[1]
@@ -407,25 +395,13 @@ async def move_callback(callback: types.CallbackQuery, state: FSMContext):
         new_x = player.x + dx
         new_y = player.y + dy
         
-        # Проверяем границы и проходимость
-        if 0 <= new_x < size and 0 <= new_y < size:
-            cell = game_map[new_y][new_x]
-            if TERRAIN_TYPES[cell.terrain]["passable"]:
-                player.x = new_x
-                player.y = new_y
-                
-                # Урон от болота
-                if cell.terrain == "swamp":
-                    damage = TERRAIN_TYPES["swamp"]["damage"]
-                    player.hp -= damage
-                    await callback.answer(f"🌫️ Болото наносит {damage} урона!")
+        # Проверяем границы
+        if 0 <= new_x < 10 and 0 <= new_y < 10:
+            player.x = new_x
+            player.y = new_y
+            dungeon[new_y][new_x].explored = True
     
-    await state.update_data(player=player)
-    await show_location(callback.message, state)
-    await callback.answer()
-
-@dp.callback_query(lambda c: c.data == "center")
-async def center_callback(callback: types.CallbackQuery, state: FSMContext):
+    await state.update_data(player=player, dungeon=dungeon)
     await show_location(callback.message, state)
     await callback.answer()
 
@@ -436,22 +412,23 @@ async def start_battle(callback: types.CallbackQuery, state: FSMContext):
     """Начинает бой"""
     data = await state.get_data()
     player = data['player']
+    dungeon = data['dungeon']
     
-    enemy_type = data.get('encounter_enemy', random.choice(["zombie", "crab"]))
-    enemy_data = LOCATIONS["beach"]["enemies"][enemy_type]
+    current_room = dungeon[player.y][player.x]
+    enemy_data = ENEMY_TYPES[current_room.enemy_type]
     
     battle_enemy = Enemy(
-        enemy_data.name,
-        enemy_data.hp,
-        enemy_data.damage,
-        enemy_data.accuracy,
-        enemy_data.defense,
-        enemy_data.exp,
-        enemy_data.loot_table,
-        enemy_data.emoji
+        enemy_data["name"],
+        enemy_data["hp"],
+        enemy_data["damage"],
+        enemy_data["accuracy"],
+        enemy_data["defense"],
+        enemy_data["exp"],
+        "enemy",
+        enemy_data["emoji"]
     )
     
-    weapon = Weapon("Пляжный нож", (5, 12), 75, 10, 2.0, 999, 0)
+    weapon = Weapon("Кинжал", (5, 12), 75, 10, 2.0, 999, 0)
     
     await state.update_data(
         battle_enemy=battle_enemy,
@@ -499,6 +476,7 @@ async def battle_callback(callback: types.CallbackQuery, state: FSMContext):
     player = data['player']
     enemy = data['battle_enemy']
     weapon = data['battle_weapon']
+    dungeon = data.get('dungeon')
     
     result = []
     
@@ -561,8 +539,13 @@ async def battle_callback(callback: types.CallbackQuery, state: FSMContext):
             player.hp = player.max_hp
             result.append(f"✨ **УРОВЕНЬ {player.level}!**")
         
-        loot, gold = generate_loot(enemy.loot_table)
+        loot, gold = generate_loot("enemy")
         player.gold += gold
+        
+        # Убираем врага из комнаты
+        if dungeon:
+            current_room = dungeon[player.y][player.x]
+            current_room.content = None
         
         loot_text = "\n".join([f"{item['emoji']} {item['name']} x{item['amount']}" for item in loot])
         
@@ -574,7 +557,7 @@ async def battle_callback(callback: types.CallbackQuery, state: FSMContext):
             f"🎒 Добыча:\n{loot_text}"
         )
         
-        await state.update_data(player=player)
+        await state.update_data(player=player, dungeon=dungeon)
         await asyncio.sleep(3)
         await show_location(callback.message, state)
         await callback.answer()
@@ -613,25 +596,24 @@ async def battle_callback(callback: types.CallbackQuery, state: FSMContext):
 async def open_chest_callback(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     player = data['player']
-    game_map = data['game_map']
+    dungeon = data['dungeon']
     
-    current_cell = game_map[player.y][player.x]
+    current_room = dungeon[player.y][player.x]
     
-    if not current_cell.chest or current_cell.chest.opened:
+    if current_room.content != "chest" or current_room.chest_opened:
         await callback.answer("❌ Здесь нет сундука!")
         return
     
-    chest = current_cell.chest
-    chest.opened = True
-    
-    loot, gold = generate_loot(chest.loot_table)
+    loot, gold = generate_loot("chest")
     player.gold += gold
+    current_room.chest_opened = True
+    current_room.content = None
     
     loot_text = []
     for item in loot:
         loot_text.append(f"{item['emoji']} {item['name']} x{item['amount']} - {item['value']}💰")
     
-    await state.update_data(player=player, game_map=game_map)
+    await state.update_data(player=player, dungeon=dungeon)
     
     text = (
         f"📦 **СУНДУК ОТКРЫТ!**\n\n"
@@ -678,8 +660,7 @@ async def show_stats(callback: types.CallbackQuery, state: FSMContext):
         f"❤️ HP: {player.hp}/{player.max_hp}\n"
         f"🛡️ Защита: {player.defense}\n"
         f"💰 Золото: {player.gold}\n"
-        f"📍 Локация: {LOCATIONS[player.current_location]['name']}\n"
-        f"📌 Позиция: ({player.x}, {player.y})"
+        f"📍 Позиция: ({player.x}, {player.y})"
     )
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -699,13 +680,11 @@ async def back_to_location(callback: types.CallbackQuery, state: FSMContext):
 @dp.message(Command('start'))
 async def cmd_start(message: types.Message, state: FSMContext):
     """Начало игры"""
-    # Генерируем новую карту при старте
-    game_map, chests = generate_map("beach")
+    dungeon = generate_dungeon()
     player = Player()
     await state.update_data(
         player=player,
-        game_map=game_map,
-        chests=chests
+        dungeon=dungeon
     )
     await show_location(message, state)
 
@@ -717,7 +696,7 @@ async def cmd_ping(message: types.Message):
 
 async def main():
     logging.basicConfig(level=logging.INFO)
-    print("🏝️ Рандомная карта 20x20 с туманом войны запущена!")
+    print("🏰 Коридорное подземелье 10x10 с ветвлениями запущено!")
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 

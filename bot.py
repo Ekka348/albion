@@ -46,19 +46,20 @@ class Player:
         self.gold = 0
         self.inventory = {"аптечка": 3}
         self.buffs = []
-        self.current_path = 2  # начинаем со среднего пути
-        self.current_pos = 0   # позиция 0-7 (всего 8 позиций)
-        self.visited = set()
+        self.current_node = "start"
+        self.visited_nodes = set()
 
 class MapNode:
-    def __init__(self, path, pos, node_type, content=None, name=""):
-        self.path = path      # 1, 2, 3
-        self.pos = pos        # 0-7
-        self.node_type = node_type  # "start", "enemy", "elite", "boss", "chest", "altar", "empty"
+    def __init__(self, node_id, node_type, content=None, name="", x=0, y=0):
+        self.id = node_id
+        self.node_type = node_type  # "start", "enemy", "boss", "chest", "altar", "empty", "exit"
         self.content = content
         self.name = name
+        self.x = x
+        self.y = y
+        self.connections = []  # список id узлов, в которые можно перейти
+        self.visited = False
         self.completed = False
-        self.visible = False
 
 # ============= ТИПЫ СОБЫТИЙ =============
 
@@ -71,9 +72,9 @@ ENEMY_TYPES = {
 }
 
 ALTAR_EFFECTS = [
-    {"name": "Алтарь силы", "desc": "⚔️ +5 урона", "effect": "damage", "value": 5, "emoji": "⚔️"},
+    {"name": "Алтарь силы", "desc": "⚔️ +5 к урону", "effect": "damage", "value": 5, "emoji": "⚔️"},
     {"name": "Алтарь здоровья", "desc": "❤️ +10 HP", "effect": "hp", "value": 10, "emoji": "❤️"},
-    {"name": "Алтарь защиты", "desc": "🛡️ +3 защиты", "effect": "defense", "value": 3, "emoji": "🛡️"},
+    {"name": "Алтарь защиты", "desc": "🛡️ +3 к защите", "effect": "defense", "value": 3, "emoji": "🛡️"},
     {"name": "Алтарь золота", "desc": "💰 +50 золота", "effect": "gold", "value": 50, "emoji": "💰"}
 ]
 
@@ -85,169 +86,266 @@ CHEST_TYPES = {
 # ============= СОЗДАНИЕ КАРТЫ =============
 
 def create_map():
-    """Создает карту с тремя путями"""
+    """Создает карту с прямыми линиями, скалами и проходом"""
     nodes = {}
     
-    # Позиции: 0=старт, 1-6=события, 7=босс
-    # Верхний путь (path=1)
-    nodes[(1,0)] = MapNode(1, 0, "start", name="🚪 Вход")
-    nodes[(1,1)] = MapNode(1, 1, "enemy", "zombie", name="🧟 Лес")
-    nodes[(1,2)] = MapNode(1, 2, "altar", 0, name="🕯️ Алтарь")
-    nodes[(1,3)] = MapNode(1, 3, "chest", "common", name="📦 Тайник")
-    nodes[(1,4)] = MapNode(1, 4, "empty", None, name="⬜ Поляна")
-    nodes[(1,5)] = MapNode(1, 5, "enemy", "skeleton", name="💀 Кладбище")
-    nodes[(1,6)] = MapNode(1, 6, "empty", None, name="⬜ Перекресток")
-    nodes[(1,7)] = MapNode(1, 7, "boss", "boss", name="👹 Логово")
+    # Главный путь (горизонтальный)
+    nodes["start"] = MapNode("start", "start", name="🧝 Старт", x=2, y=2)
+    nodes["cross1"] = MapNode("cross1", "empty", name="⬜ Перекресток", x=4, y=2)
+    nodes["enemy1"] = MapNode("enemy1", "enemy", "zombie", name="🧟 Зомби", x=6, y=2)
+    nodes["altar1"] = MapNode("altar1", "altar", 0, name="🕯️ Алтарь силы", x=8, y=2)
     
-    # Средний путь (path=2)
-    nodes[(2,0)] = MapNode(2, 0, "start", name="🚪 Вход")
-    nodes[(2,1)] = MapNode(2, 1, "chest", "common", name="📦 Дупло")
-    nodes[(2,2)] = MapNode(2, 2, "enemy", "ghost", name="👻 Туман")
-    nodes[(2,3)] = MapNode(2, 3, "altar", 1, name="🕯️ Алтарь")
-    nodes[(2,4)] = MapNode(2, 4, "chest", "rare", name="📦✨ Сокровище")
-    nodes[(2,5)] = MapNode(2, 5, "enemy", "elite", name="⚔️ Элита")
-    nodes[(2,6)] = MapNode(2, 6, "empty", None, name="⬜ Развилка")
-    nodes[(2,7)] = MapNode(2, 7, "boss", "boss", name="👹 Логово")
+    # Верхний тупик (сундук)
+    nodes["chest_top"] = MapNode("chest_top", "chest", "rare", name="📦✨ Редкий сундук", x=4, y=0)
     
-    # Нижний путь (path=3)
-    nodes[(3,0)] = MapNode(3, 0, "start", name="🚪 Вход")
-    nodes[(3,1)] = MapNode(3, 1, "altar", 2, name="🕯️ Алтарь")
-    nodes[(3,2)] = MapNode(3, 2, "chest", "common", name="📦 Корни")
-    nodes[(3,3)] = MapNode(3, 3, "enemy", "zombie", name="🧟 Болото")
-    nodes[(3,4)] = MapNode(3, 4, "empty", None, name="⬜ Поляна")
-    nodes[(3,5)] = MapNode(3, 5, "chest", "rare", name="📦✨ Пещера")
-    nodes[(3,6)] = MapNode(3, 6, "enemy", "skeleton", name="💀 Стражи")
-    nodes[(3,7)] = MapNode(3, 7, "boss", "boss", name="👹 Логово")
+    # Средний тупик (враг)
+    nodes["enemy2"] = MapNode("enemy2", "enemy", "skeleton", name="💀 Скелет", x=6, y=4)
     
-    # Делаем стартовые узлы видимыми
-    nodes[(1,0)].visible = True
-    nodes[(2,0)].visible = True
-    nodes[(3,0)].visible = True
+    # Нижний тупик (сундук)
+    nodes["chest_bottom"] = MapNode("chest_bottom", "chest", "common", name="📦 Обычный сундук", x=8, y=4)
+    
+    # Путь к боссу
+    nodes["cross2"] = MapNode("cross2", "empty", name="⬜ Развилка", x=10, y=2)
+    nodes["enemy3"] = MapNode("enemy3", "enemy", "elite", name="⚔️ Элитный рыцарь", x=12, y=2)
+    nodes["boss"] = MapNode("boss", "boss", "boss", name="👹 БОСС", x=14, y=2)
+    nodes["exit"] = MapNode("exit", "exit", name="🚪 Выход", x=16, y=2)
+    
+    # ===== СОЕДИНЕНИЯ (только вверх/вниз/влево/вправо) =====
+    
+    # Главный путь
+    nodes["start"].connections = ["cross1"]
+    nodes["cross1"].connections = ["start", "enemy1", "chest_top"]
+    nodes["enemy1"].connections = ["cross1", "altar1", "enemy2"]
+    nodes["altar1"].connections = ["enemy1", "cross2", "chest_bottom"]
+    
+    # Верхний тупик
+    nodes["chest_top"].connections = ["cross1"]
+    
+    # Средний тупик
+    nodes["enemy2"].connections = ["enemy1"]
+    
+    # Нижний тупик
+    nodes["chest_bottom"].connections = ["altar1"]
+    
+    # Путь к боссу
+    nodes["cross2"].connections = ["altar1", "enemy3"]
+    nodes["enemy3"].connections = ["cross2", "boss"]
+    nodes["boss"].connections = ["enemy3", "exit"]
+    nodes["exit"].connections = ["boss"]
+    
+    # Старт посещен
+    nodes["start"].visited = True
     
     return nodes
 
-def format_map_display(nodes, player):
-    """Форматирует карту для отображения"""
+def format_map_with_borders(nodes, current_node_id):
+    """Форматирует карту со скалами по краям"""
     lines = []
-    lines.append("╔══════════════════════════════════════════════════════════╗")
-    lines.append("║                     🗺️ ТРИ ПУТИ 🗺️                       ║")
-    lines.append("╚══════════════════════════════════════════════════════════╝")
-    lines.append("")
     
-    # Верхний путь
-    top = "🔹 ВЕРХНИЙ: "
-    for pos in range(0, 8):
-        node = nodes.get((1, pos))
-        if node:
-            if player.current_path == 1 and player.current_pos == pos:
-                top += "🧍"
-            elif node.visible:
-                if node.completed:
-                    top += "✅"
-                elif node.node_type == "enemy":
-                    top += "⚔️"
-                elif node.node_type == "elite":
-                    top += "⚔️✨"
-                elif node.node_type == "boss":
-                    top += "👹"
-                elif node.node_type == "chest":
-                    top += "📦"
-                elif node.node_type == "altar":
-                    top += "🕯️"
+    # Верхняя граница из скал
+    lines.append("⛰️" * 20)
+    
+    # Строка 0
+    line0 = "⛰️" + " " * 18 + "⛰️"
+    lines.append(line0)
+    
+    # Строка 1 (верхний тупик)
+    line1 = "⛰️"
+    for x in range(18):
+        if x == 4:
+            node = nodes.get("chest_top")
+            if node:
+                if "chest_top" == current_node_id:
+                    line1 += "🧝"
+                elif node.visited:
+                    if node.completed:
+                        line1 += "✅"
+                    else:
+                        line1 += "📦✨"
                 else:
-                    top += "⬜"
+                    line1 += "❓"
             else:
-                top += "❓"
-            
-            if pos < 7:
-                top += "────"  # 4 черточки
-    
-    lines.append(top)
-    
-    # Соединительные линии с переходами
-    conn_line = "          "
-    for pos in range(0, 8):
-        # Проверяем, есть ли переходы на этой позиции
-        has_transition = False
-        for path in [1,2,3]:
-            node = nodes.get((path, pos))
-            if node and node.visible:
-                # Переходы возможны на позициях 2,4,6
-                if pos in [2,4,6]:
-                    has_transition = True
-        
-        if has_transition:
-            conn_line += "│    "
+                line1 += " "
         else:
-            conn_line += "     "
+            line1 += " "
+    line1 += "⛰️"
+    lines.append(line1)
     
-    lines.append(conn_line)
-    
-    # Средний путь
-    mid = "🔸 СРЕДНИЙ: "
-    for pos in range(0, 8):
-        node = nodes.get((2, pos))
-        if node:
-            if player.current_path == 2 and player.current_pos == pos:
-                mid += "🧍"
-            elif node.visible:
-                if node.completed:
-                    mid += "✅"
-                elif node.node_type == "enemy":
-                    mid += "⚔️"
-                elif node.node_type == "elite":
-                    mid += "⚔️✨"
-                elif node.node_type == "boss":
-                    mid += "👹"
-                elif node.node_type == "chest":
-                    mid += "📦"
-                elif node.node_type == "altar":
-                    mid += "🕯️"
-                else:
-                    mid += "⬜"
+    # Строка 2 (основной путь)
+    line2 = "⛰️"
+    for x in range(18):
+        if x == 2:
+            node = nodes.get("start")
+            if "start" == current_node_id:
+                line2 += "🧝"
+            elif node and node.visited:
+                line2 += "🚪"
             else:
-                mid += "❓"
-            
-            if pos < 7:
-                mid += "────"
-    
-    lines.append(mid)
-    lines.append(conn_line)
-    
-    # Нижний путь
-    bot = "🔹 НИЖНИЙ:  "
-    for pos in range(0, 8):
-        node = nodes.get((3, pos))
-        if node:
-            if player.current_path == 3 and player.current_pos == pos:
-                bot += "🧍"
-            elif node.visible:
+                line2 += "❓"
+        elif x == 3:
+            line2 += "─"
+        elif x == 4:
+            node = nodes.get("cross1")
+            if "cross1" == current_node_id:
+                line2 += "🧝"
+            elif node and node.visited:
                 if node.completed:
-                    bot += "✅"
-                elif node.node_type == "enemy":
-                    bot += "⚔️"
-                elif node.node_type == "elite":
-                    bot += "⚔️✨"
-                elif node.node_type == "boss":
-                    bot += "👹"
-                elif node.node_type == "chest":
-                    bot += "📦"
-                elif node.node_type == "altar":
-                    bot += "🕯️"
+                    line2 += "✅"
                 else:
-                    bot += "⬜"
+                    line2 += "⬜"
             else:
-                bot += "❓"
-            
-            if pos < 7:
-                bot += "────"
+                line2 += "❓"
+        elif x == 5:
+            line2 += "─"
+        elif x == 6:
+            node = nodes.get("enemy1")
+            if "enemy1" == current_node_id:
+                line2 += "🧝"
+            elif node and node.visited:
+                if node.completed:
+                    line2 += "✅"
+                else:
+                    line2 += "⚔️"
+            else:
+                line2 += "❓"
+        elif x == 7:
+            line2 += "─"
+        elif x == 8:
+            node = nodes.get("altar1")
+            if "altar1" == current_node_id:
+                line2 += "🧝"
+            elif node and node.visited:
+                if node.completed:
+                    line2 += "✅"
+                else:
+                    line2 += "🕯️"
+            else:
+                line2 += "❓"
+        elif x == 9:
+            line2 += "─"
+        elif x == 10:
+            node = nodes.get("cross2")
+            if "cross2" == current_node_id:
+                line2 += "🧝"
+            elif node and node.visited:
+                if node.completed:
+                    line2 += "✅"
+                else:
+                    line2 += "⬜"
+            else:
+                line2 += "❓"
+        elif x == 11:
+            line2 += "─"
+        elif x == 12:
+            node = nodes.get("enemy3")
+            if "enemy3" == current_node_id:
+                line2 += "🧝"
+            elif node and node.visited:
+                if node.completed:
+                    line2 += "✅"
+                else:
+                    line2 += "⚔️✨"
+            else:
+                line2 += "❓"
+        elif x == 13:
+            line2 += "─"
+        elif x == 14:
+            node = nodes.get("boss")
+            if "boss" == current_node_id:
+                line2 += "🧝"
+            elif node and node.visited:
+                if node.completed:
+                    line2 += "✅"
+                else:
+                    line2 += "👹"
+            else:
+                line2 += "❓"
+        elif x == 15:
+            line2 += "─"
+        elif x == 16:
+            node = nodes.get("exit")
+            if "exit" == current_node_id:
+                line2 += "🧝"
+            elif node and node.visited:
+                if node.completed:
+                    line2 += "✅"
+                else:
+                    line2 += "🚪"
+            else:
+                line2 += "❓"
+        else:
+            line2 += " "
+    line2 += "⛰️"
+    lines.append(line2)
     
-    lines.append(bot)
-    lines.append("")
-    lines.append("🧍 ты | ❓ скрыто | ✅ пройдено")
-    lines.append("⚔️ враг | ⚔️✨ элита | 👹 босс")
-    lines.append("📦 сундук | 🕯️ алтарь | ⬜ пусто")
-    lines.append("│ - переход между путями")
+    # Вертикальные связи
+    line_conn = "⛰️"
+    for x in range(18):
+        if x == 4:
+            line_conn += "│"
+        elif x == 6:
+            line_conn += "│"
+        elif x == 8:
+            line_conn += "│"
+        else:
+            line_conn += " "
+    line_conn += "⛰️"
+    lines.append(line_conn)
+    
+    # Строка 3 (средний тупик - враг)
+    line3 = "⛰️"
+    for x in range(18):
+        if x == 6:
+            node = nodes.get("enemy2")
+            if "enemy2" == current_node_id:
+                line3 += "🧝"
+            elif node and node.visited:
+                if node.completed:
+                    line3 += "✅"
+                else:
+                    line3 += "💀"
+            else:
+                line3 += "❓"
+        else:
+            line3 += " "
+    line3 += "⛰️"
+    lines.append(line3)
+    
+    # Еще вертикальные связи
+    line_conn2 = "⛰️"
+    for x in range(18):
+        if x == 8:
+            line_conn2 += "│"
+        else:
+            line_conn2 += " "
+    line_conn2 += "⛰️"
+    lines.append(line_conn2)
+    
+    # Строка 4 (нижний тупик - сундук)
+    line4 = "⛰️"
+    for x in range(18):
+        if x == 8:
+            node = nodes.get("chest_bottom")
+            if "chest_bottom" == current_node_id:
+                line4 += "🧝"
+            elif node and node.visited:
+                if node.completed:
+                    line4 += "✅"
+                else:
+                    line4 += "📦"
+            else:
+                line4 += "❓"
+        else:
+            line4 += " "
+    line4 += "⛰️"
+    lines.append(line4)
+    
+    # Пустые строки
+    for _ in range(3):
+        lines.append("⛰️" + " " * 18 + "⛰️")
+    
+    # Нижняя граница
+    lines.append("⛰️" * 20)
     
     return "\n".join(lines)
 
@@ -271,57 +369,74 @@ def generate_loot(chest_type):
 # ============= ЭКРАН КАРТЫ =============
 
 async def show_map(message: types.Message, state: FSMContext):
-    """Показывает карту"""
+    """Показывает карту со скалами"""
     data = await state.get_data()
     
     if not data or 'map_nodes' not in data:
         map_nodes = create_map()
         player = Player()
-        # Делаем видимым стартовый узел
-        map_nodes[(player.current_path, player.current_pos)].visible = True
-        player.visited.add((player.current_path, player.current_pos))
-        await state.update_data(player=player, map_nodes=map_nodes)
+        player.visited_nodes.add("start")
+        await state.update_data(
+            player=player,
+            map_nodes=map_nodes
+        )
     else:
         player = data['player']
         map_nodes = data['map_nodes']
     
-    # Делаем текущий узел видимым
-    current_node = map_nodes.get((player.current_path, player.current_pos))
-    if current_node:
-        current_node.visible = True
-        player.visited.add((player.current_path, player.current_pos))
+    current_node = map_nodes[player.current_node]
+    current_node.visited = True
+    player.visited_nodes.add(player.current_node)
     
-    map_display = format_map_display(map_nodes, player)
+    map_display = format_map_with_borders(map_nodes, player.current_node)
     
     # Информация о текущем узле
-    node_info = f"📍 **Позиция {player.current_pos} на пути {player.current_path}**\n"
+    node_info = f"📍 **{current_node.name}**\n"
     
-    if current_node:
-        node_info += f"**{current_node.name}**\n"
-        
-        if current_node.node_type == "enemy" and not current_node.completed:
-            enemy = ENEMY_TYPES[current_node.content]
-            node_info += f"👾 {enemy['name']} | ❤️ {enemy['hp']} HP"
-        elif current_node.node_type == "elite" and not current_node.completed:
-            enemy = ENEMY_TYPES["elite"]
-            node_info += f"⚔️ ЭЛИТНЫЙ {enemy['name']} | ❤️ {enemy['hp']} HP"
-        elif current_node.node_type == "boss" and not current_node.completed:
-            node_info += f"👹 БОСС | ❤️ 150 HP"
-        elif current_node.node_type == "chest" and not current_node.completed:
-            chest = CHEST_TYPES[current_node.content]
-            node_info += f"{chest['emoji']} {chest['name']}"
-        elif current_node.node_type == "altar" and not current_node.completed:
-            altar = ALTAR_EFFECTS[current_node.content]
-            node_info += f"🕯️ {altar['name']}\n{altar['desc']}"
-        elif current_node.completed:
-            node_info += "✅ Уже пройдено"
+    if current_node.node_type == "start":
+        node_info += "🚪 Начало пути"
+    elif current_node.node_type == "exit":
+        node_info += "🚪 Выход из локации (пока закрыт)"
+    elif current_node.node_type == "enemy" and not current_node.completed:
+        enemy = ENEMY_TYPES[current_node.content]
+        node_info += f"👾 **{enemy['name']}**\n❤️ HP: {enemy['hp']}"
+    elif current_node.node_type == "boss" and not current_node.completed:
+        node_info += f"👹 **БОСС**\n❤️ HP: 150"
+    elif current_node.node_type == "chest" and not current_node.completed:
+        chest = CHEST_TYPES[current_node.content]
+        node_info += f"{chest['emoji']} **{chest['name']}**"
+    elif current_node.node_type == "altar" and not current_node.completed:
+        altar = ALTAR_EFFECTS[current_node.content]
+        node_info += f"🕯️ **{altar['name']}**\n{altar['desc']}"
+    elif current_node.node_type == "empty":
+        node_info += "⬜ Перекресток"
+    elif current_node.completed:
+        node_info += "✅ Уже пройдено"
+    
+    # Доступные пути
+    if current_node.connections:
+        paths = []
+        for conn_id in current_node.connections:
+            conn_node = map_nodes[conn_id]
+            if conn_id not in player.visited_nodes:
+                paths.append(f"{conn_node.name} (❓)")
+            else:
+                paths.append(conn_node.name)
+        node_info += f"\n\n🛤️ **Можно идти:**"
+        for p in paths:
+            node_info += f"\n  • {p}"
     
     # Статус игрока
+    buffs_text = ""
+    if player.buffs:
+        buffs_text = "\n✨ Баффы: " + ", ".join(player.buffs)
+    
     player_status = (
         f"\n👤 **{player.hp}/{player.max_hp} HP** | Ур. {player.level}\n"
         f"⚔️ Бонус: +{player.damage_bonus} | 🛡️ Защита: {player.defense}\n"
         f"💰 {player.gold} золота | Аптечек: {player.inventory['аптечка']}\n"
         f"✨ Опыт: {player.exp}/{player.level * 100}"
+        f"{buffs_text}"
     )
     
     text = f"{map_display}\n\n{node_info}{player_status}"
@@ -330,51 +445,39 @@ async def show_map(message: types.Message, state: FSMContext):
     buttons = []
     
     # Кнопка действия
-    if current_node and not current_node.completed:
-        if current_node.node_type in ["enemy", "elite", "boss"]:
+    if not current_node.completed:
+        if current_node.node_type in ["enemy", "boss"]:
             buttons.append([InlineKeyboardButton(text="⚔️ Вступить в бой", callback_data="start_battle")])
         elif current_node.node_type == "chest":
             buttons.append([InlineKeyboardButton(text="📦 Открыть сундук", callback_data="open_chest")])
         elif current_node.node_type == "altar":
             buttons.append([InlineKeyboardButton(text="🕯️ Использовать алтарь", callback_data="use_altar")])
+        elif current_node.node_type == "exit":
+            buttons.append([InlineKeyboardButton(text="🚪 Выйти", callback_data="exit_location")])
     
-    # Кнопка движения вперед
-    if player.current_pos < 7:
-        next_node = map_nodes.get((player.current_path, player.current_pos + 1))
-        if next_node:
-            emoji = "❓" if not next_node.visible else "➡️"
-            buttons.append([
-                InlineKeyboardButton(
-                    text=f"{emoji} Вперед", 
-                    callback_data="move_forward"
-                )
-            ])
-    
-    # Кнопки смены пути (доступны на позициях 2,4,6)
-    if player.current_pos in [2,4,6]:
-        # Вверх
-        if player.current_path > 1:
-            up_node = map_nodes.get((player.current_path - 1, player.current_pos))
-            if up_node:
-                emoji = "❓" if not up_node.visible else "⬆️"
-                buttons.append([
-                    InlineKeyboardButton(
-                        text=f"{emoji} Перейти вверх", 
-                        callback_data="move_up"
-                    )
-                ])
+    # Кнопки перемещения
+    for conn_id in current_node.connections:
+        conn_node = map_nodes[conn_id]
+        emoji = "❓" if conn_id not in player.visited_nodes else "➡️"
         
-        # Вниз
-        if player.current_path < 3:
-            down_node = map_nodes.get((player.current_path + 1, player.current_pos))
-            if down_node:
-                emoji = "❓" if not down_node.visible else "⬇️"
-                buttons.append([
-                    InlineKeyboardButton(
-                        text=f"{emoji} Перейти вниз", 
-                        callback_data="move_down"
-                    )
-                ])
+        # Определяем направление
+        if conn_node.x < current_node.x:
+            direction = "⬅️"
+        elif conn_node.x > current_node.x:
+            direction = "➡️"
+        elif conn_node.y < current_node.y:
+            direction = "⬆️"
+        elif conn_node.y > current_node.y:
+            direction = "⬇️"
+        else:
+            direction = "➡️"
+        
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"{direction} Идти в {conn_node.name}", 
+                callback_data=f"goto_node_{conn_id}"
+            )
+        ])
     
     # Кнопки меню
     buttons.append([
@@ -383,6 +486,7 @@ async def show_map(message: types.Message, state: FSMContext):
     ])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    
     await state.update_data(player=player, map_nodes=map_nodes)
     
     try:
@@ -392,50 +496,17 @@ async def show_map(message: types.Message, state: FSMContext):
 
 # ============= ПЕРЕМЕЩЕНИЕ =============
 
-@dp.callback_query(lambda c: c.data == "move_forward")
-async def move_forward(callback: types.CallbackQuery, state: FSMContext):
+@dp.callback_query(lambda c: c.data.startswith('goto_node_'))
+async def goto_node(callback: types.CallbackQuery, state: FSMContext):
+    node_id = callback.data.split('_')[2]
     data = await state.get_data()
     player = data['player']
     map_nodes = data['map_nodes']
     
-    if player.current_pos < 7:
-        player.current_pos += 1
-        # Делаем новый узел видимым
-        new_node = map_nodes.get((player.current_path, player.current_pos))
-        if new_node:
-            new_node.visible = True
-    
-    await state.update_data(player=player, map_nodes=map_nodes)
-    await show_map(callback.message, state)
-    await callback.answer()
-
-@dp.callback_query(lambda c: c.data == "move_up")
-async def move_up(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    player = data['player']
-    map_nodes = data['map_nodes']
-    
-    if player.current_path > 1 and player.current_pos in [2,4,6]:
-        player.current_path -= 1
-        new_node = map_nodes.get((player.current_path, player.current_pos))
-        if new_node:
-            new_node.visible = True
-    
-    await state.update_data(player=player, map_nodes=map_nodes)
-    await show_map(callback.message, state)
-    await callback.answer()
-
-@dp.callback_query(lambda c: c.data == "move_down")
-async def move_down(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    player = data['player']
-    map_nodes = data['map_nodes']
-    
-    if player.current_path < 3 and player.current_pos in [2,4,6]:
-        player.current_path += 1
-        new_node = map_nodes.get((player.current_path, player.current_pos))
-        if new_node:
-            new_node.visible = True
+    if node_id in map_nodes[player.current_node].connections:
+        player.current_node = node_id
+        player.visited_nodes.add(node_id)
+        map_nodes[node_id].visited = True
     
     await state.update_data(player=player, map_nodes=map_nodes)
     await show_map(callback.message, state)
@@ -449,12 +520,10 @@ async def start_battle(callback: types.CallbackQuery, state: FSMContext):
     player = data['player']
     map_nodes = data['map_nodes']
     
-    current_node = map_nodes.get((player.current_path, player.current_pos))
+    current_node = map_nodes[player.current_node]
     
     if current_node.node_type == "boss":
         enemy_data = ENEMY_TYPES["boss"]
-    elif current_node.node_type == "elite":
-        enemy_data = ENEMY_TYPES["elite"]
     else:
         enemy_data = ENEMY_TYPES[current_node.content]
     
@@ -506,23 +575,29 @@ async def battle_action(callback: types.CallbackQuery, state: FSMContext):
     result = []
     
     if action == "attack":
-        if random.randint(1, 100) <= 75:  # базовый шанс попадания
-            damage = random.randint(5, 12) + player.damage_bonus
-            if random.randint(1, 100) <= 10:  # шанс крита
-                damage = int(damage * 2)
-                result.append(f"🔥 КРИТ! {damage} урона")
+        # Атака игрока
+        if random.randint(1, 100) <= 75:
+            base_damage = random.randint(5, 12)
+            total_damage = base_damage + player.damage_bonus
+            
+            if random.randint(1, 100) <= 10:
+                total_damage = int(total_damage * 2)
+                result.append(f"🔥 КРИТ! {total_damage} урона")
             else:
-                result.append(f"⚔️ {damage} урона")
-            enemy.hp -= damage
+                result.append(f"⚔️ {total_damage} урона")
+            enemy.hp -= total_damage
         else:
             result.append("😫 Промах!")
         
+        # Ответ врага
         if enemy.hp > 0:
             if random.randint(1, 100) <= enemy.accuracy:
                 enemy_damage = random.randint(enemy.damage[0], enemy.damage[1])
                 enemy_damage = max(1, enemy_damage - player.defense // 2)
                 player.hp -= enemy_damage
                 result.append(f"💥 {enemy.name} атакует: {enemy_damage} урона")
+            else:
+                result.append(f"🙏 {enemy.name} промахнулся")
     
     elif action == "heal":
         if player.inventory["аптечка"] > 0:
@@ -536,6 +611,8 @@ async def battle_action(callback: types.CallbackQuery, state: FSMContext):
                 enemy_damage = max(1, enemy_damage - player.defense // 2)
                 player.hp -= enemy_damage
                 result.append(f"💥 {enemy.name} атакует: {enemy_damage} урона")
+        else:
+            result.append("❌ Нет аптечек!")
     
     elif action == "run":
         if random.random() < 0.5:
@@ -563,7 +640,7 @@ async def battle_action(callback: types.CallbackQuery, state: FSMContext):
         gold = random.randint(10, 30)
         player.gold += gold
         
-        current_node = map_nodes.get((player.current_path, player.current_pos))
+        current_node = map_nodes[player.current_node]
         current_node.completed = True
         
         await callback.message.edit_text(
@@ -612,7 +689,7 @@ async def open_chest(callback: types.CallbackQuery, state: FSMContext):
     player = data['player']
     map_nodes = data['map_nodes']
     
-    current_node = map_nodes.get((player.current_path, player.current_pos))
+    current_node = map_nodes[player.current_node]
     
     if current_node.completed:
         await callback.answer("❌ Сундук уже открыт!")
@@ -649,7 +726,7 @@ async def use_altar(callback: types.CallbackQuery, state: FSMContext):
     player = data['player']
     map_nodes = data['map_nodes']
     
-    current_node = map_nodes.get((player.current_path, player.current_pos))
+    current_node = map_nodes[player.current_node]
     altar = ALTAR_EFFECTS[current_node.content]
     
     if current_node.completed:
@@ -681,6 +758,27 @@ async def use_altar(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(player=player, map_nodes=map_nodes)
     await asyncio.sleep(2)
     await show_map(callback.message, state)
+    await callback.answer()
+
+# ============= ВЫХОД =============
+
+@dp.callback_query(lambda c: c.data == "exit_location")
+async def exit_location(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    player = data['player']
+    map_nodes = data['map_nodes']
+    
+    current_node = map_nodes[player.current_node]
+    
+    if current_node.node_type != "exit":
+        await callback.answer("❌ Здесь нет выхода!")
+        return
+    
+    await callback.message.edit_text(
+        "🚪 **ТЫ ВЫШЕЛ ИЗ ЛОКАЦИИ!**\n\n"
+        "Поздравляю с завершением тестовой карты!\n\n"
+        "Напиши /start чтобы начать заново."
+    )
     await callback.answer()
 
 # ============= ИНВЕНТАРЬ И СТАТИСТИКА =============
@@ -737,7 +835,11 @@ async def back_to_map(callback: types.CallbackQuery, state: FSMContext):
 async def cmd_start(message: types.Message, state: FSMContext):
     map_nodes = create_map()
     player = Player()
-    await state.update_data(player=player, map_nodes=map_nodes)
+    player.visited_nodes.add("start")
+    await state.update_data(
+        player=player,
+        map_nodes=map_nodes
+    )
     await show_map(message, state)
 
 @dp.message(Command('ping'))
@@ -748,9 +850,10 @@ async def cmd_ping(message: types.Message):
 
 async def main():
     logging.basicConfig(level=logging.INFO)
-    print("🗺️ Карта с тремя путями запущена!")
-    print("📌 8 позиций, 4 черточки между нодами")
-    print("🔄 Переходы на позициях 2, 4, 6")
+    print("🗺️ Карта со скалами запущена!")
+    print("⛰️ Скалы обрамляют карту")
+    print("🧝 Игрок-воин ходит по черточкам")
+    print("🚪 Выход за боссом")
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 

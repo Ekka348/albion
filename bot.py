@@ -277,10 +277,10 @@ class Player:
         self.hp = 150
         self.max_hp = 150
         self.defense = 5
-        self.damage = 15  # Базовый урон 15
+        self.damage = 15
         self.accuracy = 85
-        self.crit_chance = 5  # 5% как ты просил
-        self.crit_multiplier = 125  # 125% как ты просил
+        self.crit_chance = 5
+        self.crit_multiplier = 125
         self.attack_speed = 100
         
         self.exp = 0
@@ -616,51 +616,55 @@ async def show_dungeon(message: types.Message, state: FSMContext):
     
     current_event = floors[player.current_floor - 1]
     
-    # Визуализация подземелья
-    dungeon_view = f"""
+    # Визуализация подземелья (исправлено)
+    if current_event["type"] in ["battle", "boss"]:
+        enemy = current_event["enemy"]
+        dungeon_view = f"""
 🟫🟫🟫🟫🟫🟫
 
-👨‍🦱
-{current_event['emoji']} 
+    👨‍🦱            {enemy['emoji']}
+
+🟫🟫🟫🟫🟫🟫
+"""
+    else:
+        event = current_event["event"]
+        dungeon_view = f"""
+🟫🟫🟫🟫🟫🟫
+
+    👨‍🦱            {event['emoji']}
 
 🟫🟫🟫🟫🟫🟫
 """
     
-    # Информация о текущем этаже
+    # Информация о текущем этаже (только название и HP для мобов)
     floor_info = f"📍 **Этаж {player.current_floor}/10**\n\n"
     
     if current_event["type"] in ["battle", "boss"]:
         enemy = current_event["enemy"]
         rarity_text = {
-            "common": "🟢 Обычный",
-            "magic": "🟣 Магический",
-            "rare": "🟡 Редкий",
-            "epic": "🔴 Эпический",
-            "boss": "⚫ БОСС"
+            "common": "🟢",
+            "magic": "🟣",
+            "rare": "🟡",
+            "epic": "🔴",
+            "boss": "⚫"
         }.get(current_event.get("rarity"), "")
-        floor_info += f"**{enemy['emoji']} {enemy['name']}**\n{rarity_text}\n❤️ HP: {enemy['hp']}"
+        floor_info += f"**{enemy['emoji']} {enemy['name']}** {rarity_text}\n"
+        floor_info += f"❤️ {enemy['hp']} HP\n"
     else:
         event = current_event["event"]
         floor_info += f"**{event['emoji']} {event['name']}**"
     
-    # Статус игрока
+    # Статус фласок (только активные, коротко)
     flask_status = []
     if player.flasks:
-        for i, flask in enumerate(player.flasks):
-            marker = "👉" if i == player.active_flask else "  "
-            flask_status.append(f"{marker} {flask.get_status()}")
+        active_flask = player.flasks[player.active_flask]
+        flask_status.append(f"👉 {active_flask.get_status()}")
     flask_text = "\n".join(flask_status) if flask_status else "Нет фласок"
     
+    # Статус игрока (минимально)
     player_status = (
-        f"\n\n👤 **Уровень {player.level}**\n"
-        f"❤️ {player.hp}/{player.max_hp} HP\n"
-        f"⚔️ Урон: 15-30\n"
-        f"🛡️ Защита: {player.defense}\n"
-        f"🎯 Точность: {player.accuracy}%\n"
-        f"🔥 Крит: {player.crit_chance}% x{player.crit_multiplier}%\n"
-        f"💰 Золото: {player.gold}\n"
-        f"✨ Опыт: {player.exp}/{player.level * 100}\n\n"
-        f"🧪 **Фласки ({len(player.flasks)}/{player.max_flasks}):**\n{flask_text}"
+        f"\n\n👤 {player.hp}/{player.max_hp} ❤️\n"
+        f"🧪 **Фласка:**\n{flask_text}"
     )
     
     text = f"{dungeon_view}\n\n{floor_info}{player_status}"
@@ -742,6 +746,15 @@ async def show_battle(message: types.Message, state: FSMContext):
     player = data['player']
     enemy = data['battle_enemy']
     
+    # Визуализация боя
+    battle_view = f"""
+🟫🟫🟫🟫🟫🟫
+
+    👨‍🦱            {enemy.emoji}
+
+🟫🟫🟫🟫🟫🟫
+"""
+    
     rarity_color = {
         "common": "🟢",
         "magic": "🟣",
@@ -750,22 +763,24 @@ async def show_battle(message: types.Message, state: FSMContext):
         "boss": "⚫"
     }.get(enemy.rarity, "")
     
-    # Статус фласок с красивым отображением
+    # Информация о враге (только HP)
+    enemy_info = f"**{enemy.emoji} {enemy.name}** {rarity_color}\n❤️ {enemy.hp}/{enemy.max_hp} HP"
+    
+    # Статус фласок (только активная)
     flask_status = []
     if player.flasks:
-        for i, flask in enumerate(player.flasks):
-            marker = "👉" if i == player.active_flask else "  "
-            flask_status.append(f"{marker} {flask.get_status()}")
+        active_flask = player.flasks[player.active_flask]
+        flask_status.append(f"👉 {active_flask.get_status()}")
     flask_text = "\n".join(flask_status) if flask_status else "Нет фласок"
     
+    # Статус игрока (минимально)
+    player_status = f"👤 {player.hp}/{player.max_hp} ❤️"
+    
     text = (
-        f"⚔️ **БОЙ!** {rarity_color}\n\n"
-        f"{enemy.emoji} **{enemy.name}**\n"
-        f"❤️ HP: {enemy.hp}/{enemy.max_hp}\n\n"
-        f"👤 **Ты**\n"
-        f"❤️ {player.hp}/{player.max_hp} HP\n"
-        f"⚔️ Урон: 15-30\n\n"
-        f"🧪 **Фласки:**\n{flask_text}\n\n"
+        f"{battle_view}\n\n"
+        f"{enemy_info}\n\n"
+        f"{player_status}\n"
+        f"🧪 {flask_text}\n\n"
         f"Твой ход:"
     )
     
@@ -928,14 +943,29 @@ async def battle_action(callback: types.CallbackQuery, state: FSMContext):
             flask_status.append(f"{marker} {flask.get_status()}")
     flask_text = "\n".join(flask_status) if flask_status else "Нет фласок"
     
+    # Визуализация боя
+    battle_view = f"""
+🟫🟫🟫🟫🟫🟫
+
+    👨‍🦱            {enemy.emoji}
+
+🟫🟫🟫🟫🟫🟫
+"""
+    
+    rarity_color = {
+        "common": "🟢",
+        "magic": "🟣",
+        "rare": "🟡",
+        "epic": "🔴",
+        "boss": "⚫"
+    }.get(enemy.rarity, "")
+    
     text = (
-        f"⚔️ **БОЙ!**\n\n"
-        f"{enemy.emoji} **{enemy.name}**\n"
-        f"❤️ HP: {enemy.hp}/{enemy.max_hp}\n\n"
-        f"👤 **Ты**\n"
-        f"❤️ {player.hp}/{player.max_hp} HP\n"
-        f"⚔️ Урон: 15-30\n\n"
-        f"🧪 **Фласки:**\n{flask_text}\n\n"
+        f"{battle_view}\n\n"
+        f"**{enemy.emoji} {enemy.name}** {rarity_color}\n"
+        f"❤️ {enemy.hp}/{enemy.max_hp} HP\n\n"
+        f"👤 {player.hp}/{player.max_hp} ❤️\n"
+        f"🧪 {flask_text}\n\n"
         f"**Ход:**\n" + "\n".join(result) +
         f"\n\nТвой ход:"
     )
@@ -1261,7 +1291,7 @@ async def main():
     logging.basicConfig(level=logging.INFO)
     print("🗺️ Path of Exile Dungeon запущено!")
     print("🟫🟫🟫🟫🟫🟫")
-    print("👨‍🦱")
+    print("    👨‍🦱            🐗")
     print("🟫🟫🟫🟫🟫🟫")
     print("\n⚔️ **Параметры:**")
     print("- Урон: 15-30")

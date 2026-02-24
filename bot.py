@@ -3,6 +3,7 @@ import logging
 import random
 import json
 import os
+import time
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -16,399 +17,602 @@ API_TOKEN = os.getenv('BOT_TOKEN', '8404262144:AAFhLqVbU4FpIrM6KWfU6u9L1l5Qh-FYL
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# ============= ДАННЫЕ ДЛЯ ТЕСТА =============
+# ============= КЛАССЫ ДЛЯ БОЯ =============
 
-class LootItem:
-    def __init__(self, name, rarity, value, emoji):
+class Weapon:
+    def __init__(self, name, damage, accuracy, crit_chance, crit_multiplier, ammo, reload_time, aoe=False):
         self.name = name
-        self.rarity = rarity  # common, rare, epic, legendary
-        self.value = value
-        self.emoji = emoji
+        self.damage = damage  # (min, max)
+        self.accuracy = accuracy  # 0-100%
+        self.crit_chance = crit_chance  # 0-100%
+        self.crit_multiplier = crit_multiplier  # x урона
+        self.ammo = ammo  # текущие патроны
+        self.max_ammo = ammo
+        self.reload_time = reload_time  # сколько ходов на перезарядку
+        self.reload_progress = 0
+        self.aoe = aoe  # урон по площади
+
+class Enemy:
+    def __init__(self, name, hp, damage, accuracy, defense, count=1):
+        self.name = name
+        self.hp = hp
+        self.max_hp = hp
+        self.damage = damage  # (min, max)
+        self.accuracy = accuracy
+        self.defense = defense
+        self.count = count  # количество врагов
+
+class Player:
+    def __init__(self):
+        self.hp = 100
+        self.max_hp = 100
+        self.defense = 5
+        self.weapons = {
+            "pistol": Weapon("Пистолет", (8, 15), 90, 10, 2.0, 12, 1),
+            "shotgun": Weapon("Дробовик", (15, 25), 70, 5, 1.5, 6, 2, aoe=True),
+            "rifle": Weapon("Винтовка", (12, 20), 85, 15, 2.5, 8, 1),
+            "smg": Weapon("ПП", (5, 10), 95, 8, 1.8, 30, 1)
+        }
+        self.current_weapon = "pistol"
+        self.inventory = {"аптечка": 3, "бинт": 2}
+
+# ============= СОСТОЯНИЯ БОЯ =============
+
+class BattleState(StatesGroup):
+    waiting_action = State()
+    waiting_target = State()
+    waiting_weapon = State()
+
+# ============= ДАННЫЕ ДЛЯ ТЕСТА =============
 
 # Таблица лута
 LOOT_TABLE = {
     "крыса": [
-        LootItem("Крысиный хвост", "common", 5, "🐀"),
-        LootItem("Гнилое мясо", "common", 3, "🥩"),
-        LootItem("Кусок шкуры", "common", 4, "🧵"),
-        LootItem("Маленький клык", "rare", 15, "🦷"),
-        LootItem("Крысиный король (арт)", "epic", 50, "👑"),
+        {"name": "Крысиный хвост", "rarity": "common", "value": 5, "emoji": "🐀", "chance": 70},
+        {"name": "Гнилое мясо", "rarity": "common", "value": 3, "emoji": "🥩", "chance": 70},
+        {"name": "Кусок шкуры", "rarity": "common", "value": 4, "emoji": "🧵", "chance": 60},
+        {"name": "Маленький клык", "rarity": "rare", "value": 15, "emoji": "🦷", "chance": 20},
+        {"name": "Крысиный король", "rarity": "epic", "value": 50, "emoji": "👑", "chance": 8},
+        {"name": "Золотой зуб", "rarity": "legendary", "value": 200, "emoji": "💎", "chance": 2}
     ],
     "кабан": [
-        LootItem("Кабаний клык", "common", 8, "🐗"),
-        LootItem("Жесткая шкура", "common", 7, "🛡️"),
-        LootItem("Свежее мясо", "common", 6, "🍖"),
-        LootItem("Кровь кабана", "rare", 20, "🧪"),
-        LootItem("Бивень древнего кабана", "legendary", 200, "💎"),
+        {"name": "Кабаний клык", "rarity": "common", "value": 8, "emoji": "🐗", "chance": 70},
+        {"name": "Жесткая шкура", "rarity": "common", "value": 7, "emoji": "🛡️", "chance": 65},
+        {"name": "Свежее мясо", "rarity": "common", "value": 6, "emoji": "🍖", "chance": 75},
+        {"name": "Кровь кабана", "rarity": "rare", "value": 20, "emoji": "🧪", "chance": 20},
+        {"name": "Крепкая кость", "rarity": "epic", "value": 45, "emoji": "🦴", "chance": 8},
+        {"name": "Бивень древнего кабана", "rarity": "legendary", "value": 300, "emoji": "💎", "chance": 2}
     ],
     "скелет": [
-        LootItem("Ржавый меч", "common", 5, "⚔️"),
-        LootItem("Кости", "common", 3, "🦴"),
-        LootItem("Череп", "rare", 15, "💀"),
-        LootItem("Древний амулет", "epic", 80, "📿"),
-        LootItem("Проклятое кольцо", "legendary", 300, "💍"),
+        {"name": "Ржавый меч", "rarity": "common", "value": 5, "emoji": "⚔️", "chance": 70},
+        {"name": "Кости", "rarity": "common", "value": 3, "emoji": "🦴", "chance": 80},
+        {"name": "Череп", "rarity": "rare", "value": 15, "emoji": "💀", "chance": 15},
+        {"name": "Древний амулет", "rarity": "epic", "value": 80, "emoji": "📿", "chance": 5},
+        {"name": "Проклятое кольцо", "rarity": "legendary", "value": 500, "emoji": "💍", "chance": 2}
     ]
 }
 
-# ============= ВАРИАНТ 1: Классический пошаговый =============
+# ============= БОЕВЫЕ ФУНКЦИИ =============
 
-async def demo_classic_battle(message: types.Message):
-    """Показывает классический пошаговый бой"""
+def calculate_damage(weapon, enemy_count=1, is_aoe=False):
+    """Расчет урона с учетом всех факторов"""
+    weapon_obj = weapon if isinstance(weapon, Weapon) else None
     
-    hp = {"player": 50, "monster": 45}
+    if not weapon_obj:
+        return {"damage": 0, "crit": False, "miss": True}
     
-    battle_msg = await message.answer(
-        "⚔️ **КЛАССИЧЕСКИЙ БОЙ**\n"
-        "Выбирай часть тела для атаки!\n\n"
-        f"👤 Ты: ❤️ {hp['player']} HP\n"
-        f"🐗 Кабан: ❤️ {hp['monster']} HP",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🤜 Голова", callback_data="demo_classic_head")],
-            [InlineKeyboardButton(text="🤛 Грудь", callback_data="demo_classic_chest")],
-            [InlineKeyboardButton(text="👊 Живот", callback_data="demo_classic_body")],
-            [InlineKeyboardButton(text="🦵 Ноги", callback_data="demo_classic_legs")],
+    # Проверка на попадание
+    hit_roll = random.randint(1, 100)
+    if hit_roll > weapon_obj.accuracy:
+        return {"damage": 0, "crit": False, "miss": True}
+    
+    # Базовый урон
+    damage = random.randint(weapon_obj.damage[0], weapon_obj.damage[1])
+    
+    # Проверка на крит
+    crit = False
+    crit_roll = random.randint(1, 100)
+    if crit_roll <= weapon_obj.crit_chance:
+        damage = int(damage * weapon_obj.crit_multiplier)
+        crit = True
+    
+    # Урон по площади (уменьшается с количеством врагов)
+    if is_aoe and weapon_obj.aoe and enemy_count > 1:
+        damage = int(damage * (1.5 / enemy_count))  # Чем больше врагов, тем меньше каждому
+    
+    return {
+        "damage": damage,
+        "crit": crit,
+        "miss": False
+    }
+
+def enemy_attack(enemy, player_defense):
+    """Атака врага"""
+    if random.randint(1, 100) > enemy.accuracy:
+        return {"damage": 0, "miss": True}
+    
+    damage = random.randint(enemy.damage[0], enemy.damage[1])
+    damage = max(1, damage - player_defense // 2)  # Защита уменьшает урон
+    
+    return {"damage": damage, "miss": False}
+
+def reload_weapon(weapon):
+    """Перезарядка оружия"""
+    weapon.reload_progress += 1
+    if weapon.reload_progress >= weapon.reload_time:
+        weapon.ammo = weapon.max_ammo
+        weapon.reload_progress = 0
+        return True
+    return False
+
+# ============= ВАРИАНТ 1: ОДИНОЧНЫЙ БОЙ =============
+
+async def start_single_battle(message: types.Message, state: FSMContext):
+    """Начало одиночного боя"""
+    player = Player()
+    enemy = Enemy("Кабан", 80, (8, 15), 80, 3)
+    
+    await state.update_data(
+        player=player,
+        enemy=enemy,
+        battle_type="single"
+    )
+    
+    await show_battle_status(message, state)
+
+async def show_battle_status(message: types.Message, state: FSMContext):
+    """Показывает статус боя"""
+    data = await state.get_data()
+    player = data['player']
+    enemy = data['enemy']
+    weapon = player.weapons[player.current_weapon]
+    
+    status = (
+        f"⚔️ **ОДИНОЧНЫЙ БОЙ**\n\n"
+        f"👤 **Ты**\n"
+        f"❤️ HP: {player.hp}/{player.max_hp}\n"
+        f"🔫 {weapon.name}: {weapon.ammo}/{weapon.max_ammo} патр.\n"
+        f"Шанс попадания: {weapon.accuracy}%\n"
+        f"Крит: {weapon.crit_chance}% (x{weapon.crit_multiplier})\n\n"
+        f"🐗 **{enemy.name}**\n"
+        f"❤️ HP: {enemy.hp}/{enemy.max_hp}\n\n"
+        f"Выбери действие:"
+    )
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔫 Стрелять", callback_data="single_shoot")],
+        [InlineKeyboardButton(text="🔄 Сменить оружие", callback_data="single_change_weapon")],
+        [InlineKeyboardButton(text="💊 Аптечка", callback_data="single_heal")],
+        [InlineKeyboardButton(text="🔁 Перезарядка", callback_data="single_reload")],
+        [InlineKeyboardButton(text="🏃 Убежать", callback_data="single_run")]
+    ])
+    
+    await message.edit_text(status, reply_markup=keyboard)
+
+@dp.callback_query(lambda c: c.data.startswith('single_'))
+async def single_battle_callback(callback: types.CallbackQuery, state: FSMContext):
+    action = callback.data.split('_')[1]
+    data = await state.get_data()
+    
+    if not data:
+        await callback.message.edit_text("❌ Бой не найден. Начни заново.")
+        return
+    
+    player = data['player']
+    enemy = data['enemy']
+    weapon = player.weapons[player.current_weapon]
+    
+    result = []
+    
+    if action == "shoot":
+        # Проверка патронов
+        if weapon.ammo <= 0:
+            result.append("❌ Патронов нет! Нужно перезарядиться.")
+        else:
+            weapon.ammo -= 1
+            attack_result = calculate_damage(weapon, 1)
+            
+            if attack_result['miss']:
+                result.append("😫 Промах!")
+            else:
+                damage = attack_result['damage']
+                enemy.hp -= damage
+                crit_text = "🔥 КРИТ! " if attack_result['crit'] else ""
+                result.append(f"{crit_text}Попадание! {damage} урона.")
+            
+            # Контратака врага
+            if enemy.hp > 0:
+                enemy_attack_result = enemy_attack(enemy, player.defense)
+                if enemy_attack_result['miss']:
+                    result.append("🐗 Враг промахнулся.")
+                else:
+                    player.hp -= enemy_attack_result['damage']
+                    result.append(f"🐗 Враг атакует: {enemy_attack_result['damage']} урона.")
+    
+    elif action == "reload":
+        result.append(f"🔁 Перезарядка...")
+        if reload_weapon(weapon):
+            result.append(f"✅ Оружие перезаряжено! {weapon.max_ammo} патронов.")
+    
+    elif action == "heal":
+        if player.inventory.get("аптечка", 0) > 0:
+            heal = random.randint(20, 30)
+            player.hp = min(player.max_hp, player.hp + heal)
+            player.inventory["аптечка"] -= 1
+            result.append(f"💊 Аптечка: +{heal} HP. Осталось: {player.inventory['аптечка']}")
+        else:
+            result.append("❌ Нет аптечек!")
+    
+    elif action == "change_weapon":
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔫 Пистолет", callback_data="weapon_pistol")],
+            [InlineKeyboardButton(text="🔫 Дробовик", callback_data="weapon_shotgun")],
+            [InlineKeyboardButton(text="🔫 Винтовка", callback_data="weapon_rifle")],
+            [InlineKeyboardButton(text="🔫 ПП", callback_data="weapon_smg")],
+            [InlineKeyboardButton(text="◀ Назад", callback_data="single_back")]
         ])
-    )
+        await callback.message.edit_text("Выбери оружие:", reply_markup=keyboard)
+        await callback.answer()
+        return
     
-    return battle_msg
+    elif action == "run":
+        if random.random() < 0.5:
+            await callback.message.edit_text("🏃 Ты сбежал с поля боя!")
+            await state.clear()
+            await callback.answer()
+            return
+        else:
+            result.append("❌ Не удалось сбежать!")
+            # Контратака
+            enemy_attack_result = enemy_attack(enemy, player.defense)
+            player.hp -= enemy_attack_result['damage']
+            result.append(f"🐗 Враг атакует в спину: {enemy_attack_result['damage']} урона.")
+    
+    # Проверка окончания боя
+    if enemy.hp <= 0:
+        await callback.message.edit_text(
+            f"🎉 **ПОБЕДА!**\n\n" +
+            "\n".join(result) +
+            f"\n\nПолучено опыта: 50\n"
+            f"💰 Найдено монет: {random.randint(20, 50)}"
+        )
+        await state.clear()
+        await callback.answer()
+        return
+    
+    if player.hp <= 0:
+        await callback.message.edit_text("💀 **ТЫ ПОГИБ...**")
+        await state.clear()
+        await callback.answer()
+        return
+    
+    # Обновляем состояние
+    await state.update_data(player=player, enemy=enemy)
+    
+    # Показываем обновленный статус
+    await show_battle_status(callback.message, state)
+    await callback.answer()
 
-@dp.callback_query(lambda c: c.data.startswith('demo_classic_'))
-async def demo_classic_callback(callback: types.CallbackQuery):
-    part = callback.data.split('_')[2]
+@dp.callback_query(lambda c: c.data.startswith('weapon_'))
+async def change_weapon_callback(callback: types.CallbackQuery, state: FSMContext):
+    weapon = callback.data.split('_')[1]
+    data = await state.get_data()
     
-    # Урон игрока (10-20)
-    player_damage = random.randint(10, 20)
-    # Урон монстра (5-15)
-    monster_damage = random.randint(5, 15)
-    
-    # Шанс крита (20%)
-    if random.random() < 0.2:
-        player_damage = int(player_damage * 1.5)
-        crit_text = "🔥 КРИТ!"
-    else:
-        crit_text = ""
-    
-    # Результат
-    await callback.message.edit_text(
-        f"⚔️ **КЛАССИЧЕСКИЙ БОЙ**\n\n"
-        f"Ты ударил в {part}!\n"
-        f"Урон: {player_damage} {crit_text}\n"
-        f"🐗 Кабан ответил: {monster_damage} урона\n\n"
-        f"👤 Ты: ❤️ {50 - monster_damage} HP\n"
-        f"🐗 Кабан: ❤️ {45 - player_damage} HP\n\n"
-        f"_[Это одно сообщение, новые не создаются]_"
-    )
+    if data:
+        player = data['player']
+        player.current_weapon = weapon
+        await state.update_data(player=player)
+        
+        await show_battle_status(callback.message, state)
     
     await callback.answer()
 
-# ============= ВАРИАНТ 2: Авто-бой с выбором стратегии =============
+# ============= ВАРИАНТ 2: ГРУППОВОЙ БОЙ =============
 
-async def demo_autobattle(message: types.Message):
-    """Показывает авто-бой с выбором стратегии"""
+async def start_group_battle(message: types.Message, state: FSMContext):
+    """Начало группового боя"""
+    player = Player()
+    enemies = [
+        Enemy("Крыса", 25, (3, 6), 70, 1, count=3),
+        Enemy("Крыса", 25, (3, 6), 70, 1, count=2),
+        Enemy("Кабан", 60, (8, 12), 75, 3, count=1)
+    ]
     
-    await message.answer(
-        "⚔️ **АВТО-БОЙ**\n"
-        "В подземелье 5 крыс. Выбери тактику:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🤺 Агрессивная (+50% урона, +50% получ. урона)", callback_data="demo_auto_aggro")],
-            [InlineKeyboardButton(text="🛡️ Осторожная (-50% получ. урона, -30% урона)", callback_data="demo_auto_def")],
-            [InlineKeyboardButton(text="🎯 Фокус (убивает по одному)", callback_data="demo_auto_focus")],
-        ])
+    await state.update_data(
+        player=player,
+        enemies=enemies,
+        battle_type="group",
+        current_target=0
     )
-
-@dp.callback_query(lambda c: c.data.startswith('demo_auto_'))
-async def demo_auto_callback(callback: types.CallbackQuery):
-    tactic = callback.data.split('_')[2]
     
-    results = {
-        "aggro": {
-            "kills": random.randint(4, 5),
-            "damage": random.randint(40, 60),
-            "loot": random.randint(5, 10),
-            "text": "🤺 Ты безрассудно атаковал! Быстро, но больно."
-        },
-        "def": {
-            "kills": random.randint(2, 4),
-            "damage": random.randint(10, 25),
-            "loot": random.randint(3, 7),
-            "text": "🛡️ Ты действовал осторожно. Мало урона, но цел."
-        },
-        "focus": {
-            "kills": random.randint(3, 5),
-            "damage": random.randint(20, 35),
-            "loot": random.randint(4, 9),
-            "text": "🎯 Ты методично убивал крыс одну за другой."
-        }
+    await show_group_battle_status(message, state)
+
+async def show_group_battle_status(message: types.Message, state: FSMContext):
+    """Показывает статус группового боя"""
+    data = await state.get_data()
+    player = data['player']
+    enemies = data['enemies']
+    weapon = player.weapons[player.current_weapon]
+    
+    # Формируем список врагов
+    enemies_text = []
+    for i, enemy in enumerate(enemies):
+        if enemy.hp > 0:
+            enemies_text.append(f"{i+1}. {enemy.name} (x{enemy.count}) ❤️ {enemy.hp}/{enemy.max_hp}")
+    
+    status = (
+        f"⚔️ **ГРУППОВОЙ БОЙ**\n\n"
+        f"👤 **Ты**\n"
+        f"❤️ HP: {player.hp}/{player.max_hp}\n"
+        f"🔫 {weapon.name}: {weapon.ammo}/{weapon.max_ammo} патр.\n\n"
+        f"👥 **Враги**\n" + "\n".join(enemies_text) + "\n\n"
+        f"Выбери цель:"
+    )
+    
+    # Кнопки для выбора цели
+    buttons = []
+    for i, enemy in enumerate(enemies):
+        if enemy.hp > 0:
+            buttons.append([InlineKeyboardButton(
+                text=f"{i+1}. {enemy.name} (x{enemy.count})",
+                callback_data=f"group_target_{i}"
+            )])
+    
+    # Кнопки действий
+    buttons.append([
+        InlineKeyboardButton(text="🔫 АоЕ выстрел", callback_data="group_aoe"),
+        InlineKeyboardButton(text="🔄 Сменить оружие", callback_data="group_change_weapon"),
+        InlineKeyboardButton(text="💊 Лечиться", callback_data="group_heal"),
+        InlineKeyboardButton(text="🔁 Перезарядка", callback_data="group_reload")
+    ])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await message.edit_text(status, reply_markup=keyboard)
+
+@dp.callback_query(lambda c: c.data.startswith('group_'))
+async def group_battle_callback(callback: types.CallbackQuery, state: FSMContext):
+    action = callback.data.split('_')[1]
+    data = await state.get_data()
+    
+    if not data:
+        await callback.message.edit_text("❌ Бой не найден.")
+        return
+    
+    player = data['player']
+    enemies = data['enemies']
+    weapon = player.weapons[player.current_weapon]
+    
+    result = []
+    
+    if action == "aoe":
+        # АоЕ атака по всем врагам
+        if weapon.ammo <= 0:
+            result.append("❌ Нет патронов!")
+        else:
+            weapon.ammo -= 1
+            total_damage = 0
+            for enemy in enemies:
+                if enemy.hp > 0:
+                    attack_result = calculate_damage(weapon, len([e for e in enemies if e.hp > 0]), is_aoe=True)
+                    if not attack_result['miss']:
+                        damage = attack_result['damage']
+                        enemy.hp -= damage * enemy.count
+                        total_damage += damage
+                        result.append(f"💥 {enemy.name}: {damage} урона (x{enemy.count})")
+            
+            result.insert(0, f"🔫 **АоЕ ВЫСТРЕЛ!** Всего урона: {total_damage}")
+    
+    elif action.startswith("target"):
+        # Атака по конкретной цели
+        target_idx = int(action.split('_')[1])
+        target = enemies[target_idx]
+        
+        if weapon.ammo <= 0:
+            result.append("❌ Нет патронов!")
+        else:
+            weapon.ammo -= 1
+            attack_result = calculate_damage(weapon, 1)
+            
+            if attack_result['miss']:
+                result.append(f"😫 Промах по {target.name}!")
+            else:
+                damage = attack_result['damage']
+                target.hp -= damage
+                crit_text = "🔥 КРИТ! " if attack_result['crit'] else ""
+                result.append(f"{crit_text}{target.name}: {damage} урона")
+    
+    elif action == "heal":
+        if player.inventory.get("аптечка", 0) > 0:
+            heal = random.randint(20, 30)
+            player.hp = min(player.max_hp, player.hp + heal)
+            player.inventory["аптечка"] -= 1
+            result.append(f"💊 Аптечка: +{heal} HP")
+        else:
+            result.append("❌ Нет аптечек!")
+    
+    elif action == "reload":
+        result.append(f"🔁 Перезарядка...")
+        if reload_weapon(weapon):
+            result.append(f"✅ Оружие перезаряжено!")
+    
+    # Атака всех живых врагов
+    alive_enemies = [e for e in enemies if e.hp > 0]
+    enemy_damage_total = 0
+    for enemy in alive_enemies:
+        for _ in range(enemy.count):
+            attack = enemy_attack(enemy, player.defense)
+            if not attack['miss']:
+                player.hp -= attack['damage']
+                enemy_damage_total += attack['damage']
+    
+    if enemy_damage_total > 0:
+        result.append(f"👥 Враги атакуют: всего {enemy_damage_total} урона")
+    
+    # Проверка окончания боя
+    alive_enemies = [e for e in enemies if e.hp > 0]
+    
+    if not alive_enemies:
+        # Генерация лута
+        loot_result = generate_loot("группа")
+        await callback.message.edit_text(
+            f"🎉 **ПОБЕДА!**\n\n" +
+            "\n".join(result) +
+            f"\n\n{loot_result}"
+        )
+        await state.clear()
+        await callback.answer()
+        return
+    
+    if player.hp <= 0:
+        await callback.message.edit_text("💀 **ТЫ ПОГИБ...**")
+        await state.clear()
+        await callback.answer()
+        return
+    
+    # Обновляем состояние
+    await state.update_data(player=player, enemies=enemies)
+    
+    # Показываем обновленный статус
+    await show_group_battle_status(callback.message, state)
+    await callback.answer()
+
+# ============= ВАРИАНТ 3: ДЕМО ЛУТА =============
+
+def generate_loot(monster_type):
+    """Генерирует лут для демонстрации"""
+    if monster_type == "группа":
+        monster_type = random.choice(["крыса", "кабан", "скелет"])
+    
+    items = LOOT_TABLE.get(monster_type, LOOT_TABLE["крыса"])
+    
+    # Симуляция выпадения
+    loot = []
+    total_value = 0
+    
+    for item in items:
+        if random.randint(1, 100) <= item["chance"]:
+            loot.append(item)
+            total_value += item["value"]
+    
+    if not loot:
+        common = [i for i in items if i["rarity"] == "common"]
+        if common:
+            item = random.choice(common)
+            loot.append(item)
+            total_value += item["value"]
+    
+    # Цвета редкости
+    rarity_colors = {
+        "common": "🟢 Обычный",
+        "rare": "🔵 Редкий",
+        "epic": "🟣 Эпический",
+        "legendary": "🟠 Легендарный"
     }
     
-    r = results[tactic]
+    loot_text = []
+    for item in loot:
+        loot_text.append(f"{item['emoji']} **{item['name']}** - {rarity_colors[item['rarity']]} +{item['value']}💰")
     
-    await callback.message.edit_text(
-        f"⚔️ **РЕЗУЛЬТАТ АВТО-БОЯ**\n\n"
-        f"{r['text']}\n\n"
-        f"📊 **Итоги:**\n"
-        f"• Убито крыс: {r['kills']}/5\n"
-        f"• Получено урона: {r['damage']} HP\n"
-        f"• Найдено предметов: {r['loot']} 🎒\n\n"
-        f"_[ВСЁ в одном сообщении! Никакого спама]_"
-    )
-    
-    await callback.answer()
-
-# ============= ВАРИАНТ 3: Несколько врагов с группировкой =============
-
-async def demo_group_battle(message: types.Message):
-    """Показывает бой с несколькими врагами"""
-    
-    battle_msg = await message.answer(
-        "⚔️ **ГРУППОВОЙ БОЙ**\n"
-        "🐀 3 Крысы | 🐀 2 Крысы | 🐗 1 Кабан\n\n"
-        "👤 Ты: ❤️ 100/100 HP\n\n"
-        "Выбери цель:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🐀 Крыса (3 шт)", callback_data="demo_group_rats")],
-            [InlineKeyboardButton(text="🐗 Кабан (1 шт)", callback_data="demo_group_boar")],
-            [InlineKeyboardButton(text="⚡ АоЕ атака", callback_data="demo_group_aoe")],
-        ])
-    )
-    
-    return battle_msg
-
-@dp.callback_query(lambda c: c.data.startswith('demo_group_'))
-async def demo_group_callback(callback: types.CallbackQuery):
-    target = callback.data.split('_')[2]
-    
-    if target == "rats":
-        # Убивает одну крысу
-        await callback.message.edit_text(
-            "⚔️ **ГРУППОВОЙ БОЙ**\n\n"
-            "Ты атаковал крыс!\n"
-            "🐀 Крыса получает 25 урона!\n"
-            "🐀 Крыса погибает!\n\n"
-            "🐀 Осталось: 2 крысы | 🐗 1 кабан\n\n"
-            "🐀 Крысы контратакуют:\n"
-            "• Крыса 1: укус - 5 HP\n"
-            "• Крыса 2: укус - 7 HP\n"
-            "ВСЕГО: 12 HP урона\n\n"
-            "👤 Ты: ❤️ 88/100 HP\n"
-            "_Группировка урона: одно число вместо двух сообщений_"
-        )
-    elif target == "boar":
-        await callback.message.edit_text(
-            "⚔️ **ГРУППОВОЙ БОЙ**\n\n"
-            "Ты атаковал кабана!\n"
-            "🐗 Кабан получает 18 урона!\n\n"
-            "🐗 Кабан в ярости топает!\n"
-            "🐀 2 крысы присоединяются к атаке!\n\n"
-            "🐗 Кабан: удар - 12 HP\n"
-            "🐀 Крысы: укусы - 8 HP\n"
-            "ВСЕГО: 20 HP урона\n\n"
-            "👤 Ты: ❤️ 80/100 HP\n"
-            "_Враги атакуют группой_"
-        )
-    else:  # aoe
-        await callback.message.edit_text(
-            "⚔️ **ГРУППОВОЙ БОЙ**\n\n"
-            "💥 Ты используесть Взрыв!\n"
-            "Урон по всем:\n"
-            "• Крысы: 15 урона каждой\n"
-            "• Кабан: 10 урона\n\n"
-            "Результат:\n"
-            "🐀 2 крысы погибли!\n"
-            "🐗 Кабан: ❤️ 40/50 HP\n"
-            "🐀 Осталась 1 крыса: ❤️ 10/25 HP\n\n"
-            "🐗 Кабан и крыса контратакуют:\n"
-            "Совместная атака: 18 HP урона\n\n"
-            "👤 Ты: ❤️ 82/100 HP\n"
-            "_Всё в одном сообщении!_"
-        )
-    
-    await callback.answer()
-
-# ============= ВАРИАНТ 4: Очки действий (Action Points) =============
-
-async def demo_ap_battle(message: types.Message):
-    """Показывает бой с очками действий"""
-    
-    await message.answer(
-        "⚔️ **СИСТЕМА ОЧКОВ ДЕЙСТВИЙ (AP)**\n"
-        "🐗 Кабан (50 HP) | 🐀 Крыса (30 HP) | 🐀 Крыса (25 HP)\n\n"
-        "Твои ОД: 3/3\n\n"
-        "Выбери действие:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⚔️ Удар (1 ОД) - 10-15 урона", callback_data="demo_ap_attack")],
-            [InlineKeyboardButton(text="💥 Сильный удар (2 ОД) - 20-30 урона", callback_data="demo_ap_heavy")],
-            [InlineKeyboardButton(text="🛡️ Защита (1 ОД) - -50% урона в этом ходу", callback_data="demo_ap_defend")],
-            [InlineKeyboardButton(text="⚡ Ураган (3 ОД) - атака по всем", callback_data="demo_ap_aoe")],
-        ])
+    return (
+        f"🎒 **ДОБЫЧА**\n" +
+        "\n".join(loot_text) +
+        f"\n\n💰 Всего: {total_value} монет"
     )
 
-@dp.callback_query(lambda c: c.data.startswith('demo_ap_'))
-async def demo_ap_callback(callback: types.CallbackQuery):
-    action = callback.data.split('_')[2]
-    
-    results = {
-        "attack": {
-            "damage": random.randint(10, 15),
-            "target": "кабана",
-            "ap": 1,
-            "text": "Ты ударил кабана!"
-        },
-        "heavy": {
-            "damage": random.randint(20, 30),
-            "target": "кабана",
-            "ap": 2,
-            "text": "💥 МОЩНЫЙ УДАР!"
-        },
-        "defend": {
-            "damage": random.randint(5, 10),
-            "target": "себя",
-            "ap": 1,
-            "text": "🛡️ Ты встал в защитную стойку"
-        },
-        "aoe": {
-            "damage": 15,
-            "target": "всех",
-            "ap": 3,
-            "text": "⚡ ВИХРЬ КЛИНКОВ!"
-        }
-    }
-    
-    r = results[action]
-    
-    # Считаем урон от врагов
-    enemy_damage = random.randint(8, 12) if action != "defend" else random.randint(3, 6)
-    
-    await callback.message.edit_text(
-        f"⚔️ **ОЧКИ ДЕЙСТВИЙ**\n\n"
-        f"{r['text']}\n"
-        f"Урон по {r['target']}: {r['damage']} HP\n"
-        f"Потрачено ОД: {r['ap']}\n\n"
-        f"🐗 Враги контратакуют:\n"
-        f"Нанесено урона: {enemy_damage} HP\n\n"
-        f"👤 Осталось ОД: {3 - r['ap']}/3\n"
-        f"👤 Ты: ❤️ {100 - enemy_damage} HP\n\n"
-        f"_[Можно сделать несколько действий за ход, тратя ОД]_"
-    )
-    
-    await callback.answer()
-
-# ============= ДЕМО ЛУТА =============
-
-async def demo_loot(message: types.Message):
-    """Показывает разные варианты выпадения лута"""
+@dp.message(Command('loot'))
+async def cmd_loot(message: types.Message):
+    """Демонстрация лута"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🐀 Крыса", callback_data="loot_rat")],
+        [InlineKeyboardButton(text="🐗 Кабан", callback_data="loot_boar")],
+        [InlineKeyboardButton(text="💀 Скелет", callback_data="loot_skeleton")],
+        [InlineKeyboardButton(text="🎲 Рандом", callback_data="loot_random")]
+    ])
     
     await message.answer(
         "🎒 **ДЕМОНСТРАЦИЯ ЛУТА**\n\n"
-        "Выбери монстра:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🐀 Крыса", callback_data="demo_loot_rat")],
-            [InlineKeyboardButton(text="🐗 Кабан", callback_data="demo_loot_boar")],
-            [InlineKeyboardButton(text="💀 Скелет", callback_data="demo_loot_skeleton")],
-            [InlineKeyboardButton(text="🎲 Рандомный лут", callback_data="demo_loot_random")],
-        ])
+        "Выбери монстра для проверки дропа:",
+        reply_markup=keyboard
     )
 
-@dp.callback_query(lambda c: c.data.startswith('demo_loot_'))
-async def demo_loot_callback(callback: types.CallbackQuery):
-    monster = callback.data.split('_')[2]
+@dp.callback_query(lambda c: c.data.startswith('loot_'))
+async def loot_callback(callback: types.CallbackQuery):
+    monster = callback.data.split('_')[1]
     
-    if monster == "random":
-        monster = random.choice(["крыса", "кабан", "скелет"])
+    monster_map = {
+        "rat": "крыса",
+        "boar": "кабан",
+        "skeleton": "скелет",
+        "random": random.choice(["крыса", "кабан", "скелет"])
+    }
     
-    # Выбор случайного лута
-    items = LOOT_TABLE[monster]
+    monster_type = monster_map.get(monster, "крыса")
+    result = generate_loot(monster_type)
     
-    # 70% шанс получить 1 предмет, 20% - 2, 10% - 3
-    count = random.choices([1, 2, 3], weights=[70, 20, 10])[0]
-    
-    # Выбираем предметы
-    loot = random.sample(items, min(count, len(items)))
-    
-    # Форматируем результат
-    loot_text = []
-    for item in loot:
-        rarity_color = {
-            "common": "обычный",
-            "rare": "🔵 редкий",
-            "epic": "🟣 эпический",
-            "legendary": "🟠 легендарный"
-        }
-        loot_text.append(f"{item.emoji} {item.name} [{rarity_color[item.rarity]}] +{item.value}💰")
-    
-    total_value = sum(item.value for item in loot)
-    
-    # Проверка на редкий дроп (10% шанс)
-    rare_drop = random.random() < 0.1
-    if rare_drop and monster == "крыса":
-        loot_text.append("👑 **Крысиный король** [🔴 уникальный] +500💰")
-        total_value += 500
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎲 Еще раз", callback_data=f"loot_{monster}")],
+        [InlineKeyboardButton(text="◀ В меню", callback_data="back_to_loot")]
+    ])
     
     await callback.message.edit_text(
-        f"🎒 **ЛУТ С {monster.upper()}**\n\n"
-        f"Найдено предметов: {len(loot_text)}\n\n" +
-        "\n".join(loot_text) +
-        f"\n\n💰 Общая стоимость: {total_value} монет\n"
-        f"💎 Шанс редкой находки: 10%\n"
-        f"_[Система редкости: обычный → 🔵 редкий → 🟣 эпический → 🟠 легендарный]_"
+        f"📦 **Лут с {monster_type.upper()}**\n\n{result}",
+        reply_markup=keyboard
     )
-    
     await callback.answer()
 
 # ============= ГЛАВНОЕ МЕНЮ =============
 
 @dp.message(Command('start'))
 async def cmd_start(message: types.Message):
-    """Главное меню тестового бота"""
+    """Главное меню"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⚔️ Одиночный бой", callback_data="menu_single")],
+        [InlineKeyboardButton(text="👥 Групповой бой", callback_data="menu_group")],
+        [InlineKeyboardButton(text="🎒 Демо лута", callback_data="menu_loot")]
+    ])
     
     await message.answer(
-        "⚔️ **ARPG ДЕМОНСТРАЦИЯ** ⚔️\n\n"
-        "Я покажу тебе 4 варианта боя и систему лута.\n"
-        "Нажимай на кнопки и смотри, как выглядит каждый вариант!\n\n"
-        "**Проблема:** обычный бой = тонна текста\n"
-        "**Решение:** разные подходы к компактности\n\n"
-        "👇 Выбери вариант:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⚔️ 1. Классический (угадай часть тела)", callback_data="demo_classic")],
-            [InlineKeyboardButton(text="🤺 2. Авто-бой (стратегия + итог)", callback_data="demo_auto")],
-            [InlineKeyboardButton(text="🐀 3. Групповой бой (5+ врагов)", callback_data="demo_group")],
-            [InlineKeyboardButton(text="⚡ 4. Очки действий (AP система)", callback_data="demo_ap")],
-            [InlineKeyboardButton(text="🎒 5. ДЕМО ЛУТА", callback_data="demo_loot_menu")],
-        ])
+        "⚔️ **ARPG БОЕВАЯ СИСТЕМА** ⚔️\n\n"
+        "Выбери режим для тестирования:\n\n"
+        "• **Одиночный бой** - классический 1 на 1\n"
+        "• **Групповой бой** - против нескольких врагов\n"
+        "• **Демо лута** - система выпадения предметов\n\n"
+        "В бою доступны:\n"
+        "✅ Шанс попадания\n"
+        "✅ Критические удары\n"
+        "✅ Перезарядка оружия\n"
+        "✅ Урон по площади\n"
+        "✅ Разное оружие",
+        reply_markup=keyboard
     )
 
-@dp.callback_query(lambda c: c.data == "demo_classic")
-async def demo_classic_menu(callback: types.CallbackQuery):
-    await demo_classic_battle(callback.message)
+@dp.callback_query(lambda c: c.data.startswith('menu_'))
+async def menu_callback(callback: types.CallbackQuery, state: FSMContext):
+    action = callback.data.split('_')[1]
+    
+    if action == "single":
+        await start_single_battle(callback.message, state)
+    elif action == "group":
+        await start_group_battle(callback.message, state)
+    elif action == "loot":
+        await cmd_loot(callback.message)
+    
     await callback.answer()
 
-@dp.callback_query(lambda c: c.data == "demo_auto")
-async def demo_auto_menu(callback: types.CallbackQuery):
-    await demo_autobattle(callback.message)
-    await callback.answer()
-
-@dp.callback_query(lambda c: c.data == "demo_group")
-async def demo_group_menu(callback: types.CallbackQuery):
-    await demo_group_battle(callback.message)
-    await callback.answer()
-
-@dp.callback_query(lambda c: c.data == "demo_ap")
-async def demo_ap_menu(callback: types.CallbackQuery):
-    await demo_ap_battle(callback.message)
-    await callback.answer()
-
-@dp.callback_query(lambda c: c.data == "demo_loot_menu")
-async def demo_loot_menu(callback: types.CallbackQuery):
-    await demo_loot(callback.message)
+@dp.callback_query(lambda c: c.data == "back_to_loot")
+async def back_to_loot(callback: types.CallbackQuery):
+    await cmd_loot(callback.message)
     await callback.answer()
 
 @dp.message(Command('ping'))
 async def cmd_ping(message: types.Message):
     await message.answer("🏓 pong")
 
+# ============= ЗАПУСК =============
+
 async def main():
     logging.basicConfig(level=logging.INFO)
-    print("🚀 Тестовый бот ARPG запущен!")
+    print("🚀 ARPG Бот запущен!")
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 

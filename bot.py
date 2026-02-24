@@ -54,22 +54,49 @@ class Player:
         self.gold = 0
         self.inventory = {"аптечка": 3}
         self.current_location = "beach"
-        self.position = 0
+        self.x = 10  # начальная позиция по центру
+        self.y = 10
 
 class Chest:
-    def __init__(self, position, loot_table):
-        self.position = position
+    def __init__(self, x, y, loot_table):
+        self.x = x
+        self.y = y
         self.loot_table = loot_table
         self.opened = False
 
+class MapCell:
+    def __init__(self, x, y, terrain):
+        self.x = x
+        self.y = y
+        self.terrain = terrain  # "sand", "water", "rock", "tree"
+        self.enemy = None
+        self.chest = None
+        self.explored = False
+
 # ============= ДАННЫЕ ЛОКАЦИЙ =============
+
+TERRAIN_TYPES = {
+    "sand": {"emoji": "🟨", "name": "песок", "passable": True},
+    "water": {"emoji": "🟦", "name": "вода", "passable": False},
+    "rock": {"emoji": "⛰️", "name": "скала", "passable": False},
+    "tree": {"emoji": "🌲", "name": "дерево", "passable": True},
+    "swamp": {"emoji": "🟫", "name": "болото", "passable": True, "damage": 2}
+}
+
+BORDER_EMOJIS = ["⛰️", "🌲", "🌴", "🗻", "🏔️"]
 
 LOCATIONS = {
     "beach": {
-        "name": "🏖️ Проклятый пляж",
-        "description": "Мрачный пляж, усыпанный костями и обломками кораблей.",
-        "background": "🏝️🌊🌴",
-        "map_size": 20,  # Увеличили карту до 20 клеток
+        "name": "🏖️ Дикий пляж",
+        "description": "Огромный пляж, уходящий в глубь острова.",
+        "size": 20,  # 20x20
+        "terrain_weights": {
+            "sand": 50,
+            "water": 15,
+            "rock": 10,
+            "tree": 15,
+            "swamp": 10
+        },
         "enemies": {
             "zombie": Enemy(
                 name="🧟 Зомби матрос",
@@ -92,13 +119,7 @@ LOCATIONS = {
                 emoji="🦀"
             )
         },
-        "chests": [
-            Chest(5, "beach_chest"),
-            Chest(8, "beach_chest"), 
-            Chest(12, "beach_chest"),
-            Chest(15, "beach_chest"),
-            Chest(18, "beach_boss_chest")
-        ]
+        "chest_count": 8  # количество сундуков
     }
 }
 
@@ -127,15 +148,86 @@ LOOT_TABLES = {
         {"name": "Старинная монета", "rarity": "rare", "value": 50, "emoji": "🪙", "chance": 30, "stack": True},
         {"name": "Кинжал русалки", "rarity": "epic", "value": 120, "emoji": "🗡️", "chance": 10, "stack": False},
         {"name": "Трезубец Посейдона", "rarity": "legendary", "value": 500, "emoji": "🔱", "chance": 2, "stack": False}
-    ],
-    "beach_boss_chest": [
-        {"name": "Золото", "rarity": "common", "value": 100, "emoji": "💰", "chance": 100, "stack": True, "min": 50, "max": 150},
-        {"name": "Алмаз", "rarity": "rare", "value": 200, "emoji": "💎", "chance": 50, "stack": True},
-        {"name": "Рубин", "rarity": "epic", "value": 300, "emoji": "🔴", "chance": 30, "stack": True},
-        {"name": "Легендарный меч", "rarity": "legendary", "value": 800, "emoji": "⚔️✨", "chance": 15, "stack": False},
-        {"name": "Корона затонувшего короля", "rarity": "legendary", "value": 1000, "emoji": "👑", "chance": 5, "stack": False}
     ]
 }
+
+# ============= ГЕНЕРАЦИЯ КАРТЫ =============
+
+def generate_map(location_name):
+    """Генерирует случайную карту"""
+    location = LOCATIONS[location_name]
+    size = location["size"]
+    weights = location["terrain_weights"]
+    
+    # Создаем пустую карту
+    game_map = []
+    for y in range(size):
+        row = []
+        for x in range(size):
+            # Выбираем тип местности по весам
+            terrain = random.choices(
+                list(weights.keys()),
+                weights=list(weights.values())
+            )[0]
+            row.append(MapCell(x, y, terrain))
+        game_map.append(row)
+    
+    # Добавляем границы (непроходимые)
+    for y in range(size):
+        for x in range(size):
+            if x == 0 or x == size-1 or y == 0 or y == size-1:
+                game_map[y][x].terrain = random.choice(["rock", "tree"])
+                game_map[y][x].explored = True  # границы видны всегда
+    
+    # Расставляем сундуки случайно
+    chests = []
+    for _ in range(location["chest_count"]):
+        attempts = 0
+        while attempts < 100:
+            x = random.randint(1, size-2)
+            y = random.randint(1, size-2)
+            # Не ставим сундуки на воду и на границы
+            if game_map[y][x].terrain not in ["water", "rock"] and game_map[y][x].chest is None:
+                chest = Chest(x, y, "beach_chest")
+                game_map[y][x].chest = chest
+                chests.append(chest)
+                break
+            attempts += 1
+    
+    return game_map, chests
+
+def get_visible_area(game_map, player_x, player_y, vision_range=2):
+    """Возвращает видимую область карты"""
+    size = len(game_map)
+    visible = []
+    
+    for y in range(size):
+        row = []
+        for x in range(size):
+            dist = abs(x - player_x) + abs(y - player_y)
+            cell = game_map[y][x]
+            
+            # Отмечаем клетку как исследованную
+            if dist <= vision_range:
+                cell.explored = True
+            
+            # Определяем, что показывать
+            if cell.explored:
+                # Показываем реальный террейн
+                if x == player_x and y == player_y:
+                    row.append("🧍")  # игрок
+                elif cell.chest and not cell.chest.opened:
+                    row.append("📦")  # сундук
+                elif cell.enemy:
+                    row.append(cell.enemy.emoji)  # враг
+                else:
+                    row.append(TERRAIN_TYPES[cell.terrain]["emoji"])
+            else:
+                row.append("⬛")  # неизведанно
+        
+        visible.append(row)
+    
+    return visible
 
 # ============= ФУНКЦИИ =============
 
@@ -175,61 +267,53 @@ def generate_loot(table_name):
 async def show_location(message: types.Message, state: FSMContext):
     """Показывает карту локации"""
     data = await state.get_data()
-    if not data or 'player' not in data:
+    
+    if not data or 'game_map' not in data:
+        # Генерируем новую карту
+        game_map, chests = generate_map("beach")
         player = Player()
-        await state.update_data(player=player)
+        await state.update_data(
+            player=player,
+            game_map=game_map,
+            chests=chests
+        )
     else:
         player = data['player']
+        game_map = data['game_map']
     
     location = LOCATIONS[player.current_location]
-    map_size = location["map_size"]
+    visible_map = get_visible_area(game_map, player.x, player.y)
     
-    # Создаем увеличенную карту пляжа
+    # Формируем строки карты
     map_lines = []
-    line_length = 10  # 10 клеток в строке
-    
-    for row in range(0, map_size, line_length):
-        line = []
-        for i in range(line_length):
-            pos = row + i
-            if pos >= map_size:
-                break
-                
-            if pos == player.position:
-                line.append("🧍")  # Человечек вместо красного шарика
-            else:
-                chest_found = False
-                for chest in location["chests"]:
-                    if chest.position == pos and not chest.opened:
-                        line.append("📦")
-                        chest_found = True
-                        break
-                if not chest_found:
-                    line.append("⬜")
-        map_lines.append("".join(line))
+    for y, row in enumerate(visible_map):
+        # Добавляем границы слева и справа
+        if y == 0 or y == len(visible_map)-1:
+            border = random.choice(BORDER_EMOJIS) * 2
+        else:
+            border = random.choice(BORDER_EMOJIS)
+        
+        line = border + "".join(row) + border
+        map_lines.append(line)
     
     map_str = "\n".join(map_lines)
     
-    # Определяем, что на текущей клетке
-    cell_info = "Пусто"
+    # Что на текущей клетке
+    current_cell = game_map[player.y][player.x]
+    cell_info = f"{TERRAIN_TYPES[current_cell.terrain]['emoji']} {TERRAIN_TYPES[current_cell.terrain]['name']}"
     cell_action = None
     
-    # Проверяем сундуки
-    for chest in location["chests"]:
-        if chest.position == player.position and not chest.opened:
-            cell_info = "📦 Закрытый сундук"
-            cell_action = "open_chest"
-            break
+    if current_cell.chest and not current_cell.chest.opened:
+        cell_info += " + 📦 сундук"
+        cell_action = "open_chest"
     
-    # Если не сундук, проверяем врага
-    if not cell_action:
-        # 30% шанс встретить врага
-        if random.random() < 0.3:
-            enemy_type = random.choice(["zombie", "crab"])
-            enemy = location["enemies"][enemy_type]
-            cell_info = f"⚠️ {enemy.emoji} {enemy.name}"
-            cell_action = "start_battle"
-            await state.update_data(encounter_enemy=enemy_type)
+    # Шанс встретить врага
+    if not cell_action and random.random() < 0.2:
+        enemy_type = random.choice(["zombie", "crab"])
+        enemy = location["enemies"][enemy_type]
+        cell_info += f" + ⚠️ {enemy.emoji} {enemy.name}"
+        cell_action = "start_battle"
+        await state.update_data(encounter_enemy=enemy_type)
     
     # Статус игрока
     player_status = (
@@ -239,27 +323,48 @@ async def show_location(message: types.Message, state: FSMContext):
     )
     
     text = (
-        f"🏖️ **{location['name']}**\n"
-        f"{location['background']}\n\n"
+        f"🏝️ **{location['name']}**\n"
+        f"{location['description']}\n\n"
         f"{map_str}\n"
-        f"🧍 ты | 📦 сундук | ⬜ пусто\n\n"
-        f"📍 **Позиция:** {player.position}/{map_size-1}\n"
+        f"🧍 ты | 📦 сундук | ⬛ туман\n\n"
+        f"📍 **Позиция:** ({player.x}, {player.y})\n"
         f"🔍 **Здесь:** {cell_info}\n\n"
         f"{player_status}"
     )
     
-    # Кнопки
+    # Кнопки перемещения (8 направлений)
     buttons = []
     
-    # Кнопки перемещения
-    move_buttons = []
-    if player.position > 0:
-        move_buttons.append(InlineKeyboardButton(text="◀ Влево", callback_data="move_left"))
-    if player.position < map_size - 1:
-        move_buttons.append(InlineKeyboardButton(text="Вправо ▶", callback_data="move_right"))
+    move_row1 = []
+    if player.y > 0:
+        if player.x > 0:
+            move_row1.append(InlineKeyboardButton(text="↖️", callback_data="move_nw"))
+        move_row1.append(InlineKeyboardButton(text="⬆️", callback_data="move_n"))
+        if player.x < location["size"] - 1:
+            move_row1.append(InlineKeyboardButton(text="↗️", callback_data="move_ne"))
     
-    if move_buttons:
-        buttons.append(move_buttons)
+    if move_row1:
+        buttons.append(move_row1)
+    
+    move_row2 = []
+    if player.x > 0:
+        move_row2.append(InlineKeyboardButton(text="⬅️", callback_data="move_w"))
+    move_row2.append(InlineKeyboardButton(text="⏺️", callback_data="center"))
+    if player.x < location["size"] - 1:
+        move_row2.append(InlineKeyboardButton(text="➡️", callback_data="move_e"))
+    
+    buttons.append(move_row2)
+    
+    move_row3 = []
+    if player.y < location["size"] - 1:
+        if player.x > 0:
+            move_row3.append(InlineKeyboardButton(text="↙️", callback_data="move_sw"))
+        move_row3.append(InlineKeyboardButton(text="⬇️", callback_data="move_s"))
+        if player.x < location["size"] - 1:
+            move_row3.append(InlineKeyboardButton(text="↘️", callback_data="move_se"))
+    
+    if move_row3:
+        buttons.append(move_row3)
     
     # Кнопка действия
     if cell_action:
@@ -283,19 +388,44 @@ async def show_location(message: types.Message, state: FSMContext):
 
 # ============= ПЕРЕМЕЩЕНИЕ =============
 
-@dp.callback_query(lambda c: c.data in ["move_left", "move_right"])
+@dp.callback_query(lambda c: c.data.startswith('move_'))
 async def move_callback(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    player = data.get('player', Player())
+    player = data['player']
+    game_map = data['game_map']
     location = LOCATIONS[player.current_location]
-    map_size = location["map_size"]
+    size = location["size"]
     
-    if callback.data == "move_left":
-        player.position = max(0, player.position - 1)
-    else:
-        player.position = min(map_size - 1, player.position + 1)
+    dirs = {
+        "n": (0, -1), "s": (0, 1), "w": (-1, 0), "e": (1, 0),
+        "nw": (-1, -1), "ne": (1, -1), "sw": (-1, 1), "se": (1, 1)
+    }
+    
+    move_dir = callback.data.split('_')[1]
+    if move_dir in dirs:
+        dx, dy = dirs[move_dir]
+        new_x = player.x + dx
+        new_y = player.y + dy
+        
+        # Проверяем границы и проходимость
+        if 0 <= new_x < size and 0 <= new_y < size:
+            cell = game_map[new_y][new_x]
+            if TERRAIN_TYPES[cell.terrain]["passable"]:
+                player.x = new_x
+                player.y = new_y
+                
+                # Урон от болота
+                if cell.terrain == "swamp":
+                    damage = TERRAIN_TYPES["swamp"]["damage"]
+                    player.hp -= damage
+                    await callback.answer(f"🌫️ Болото наносит {damage} урона!")
     
     await state.update_data(player=player)
+    await show_location(callback.message, state)
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data == "center")
+async def center_callback(callback: types.CallbackQuery, state: FSMContext):
     await show_location(callback.message, state)
     await callback.answer()
 
@@ -483,19 +613,17 @@ async def battle_callback(callback: types.CallbackQuery, state: FSMContext):
 async def open_chest_callback(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     player = data['player']
-    location = LOCATIONS[player.current_location]
+    game_map = data['game_map']
     
-    chest = None
-    for c in location["chests"]:
-        if c.position == player.position and not c.opened:
-            chest = c
-            break
+    current_cell = game_map[player.y][player.x]
     
-    if not chest:
+    if not current_cell.chest or current_cell.chest.opened:
         await callback.answer("❌ Здесь нет сундука!")
         return
     
+    chest = current_cell.chest
     chest.opened = True
+    
     loot, gold = generate_loot(chest.loot_table)
     player.gold += gold
     
@@ -503,13 +631,7 @@ async def open_chest_callback(callback: types.CallbackQuery, state: FSMContext):
     for item in loot:
         loot_text.append(f"{item['emoji']} {item['name']} x{item['amount']} - {item['value']}💰")
     
-    for i, c in enumerate(location["chests"]):
-        if c.position == player.position:
-            location["chests"][i] = chest
-            break
-    
-    LOCATIONS[player.current_location] = location
-    await state.update_data(player=player)
+    await state.update_data(player=player, game_map=game_map)
     
     text = (
         f"📦 **СУНДУК ОТКРЫТ!**\n\n"
@@ -557,7 +679,7 @@ async def show_stats(callback: types.CallbackQuery, state: FSMContext):
         f"🛡️ Защита: {player.defense}\n"
         f"💰 Золото: {player.gold}\n"
         f"📍 Локация: {LOCATIONS[player.current_location]['name']}\n"
-        f"📌 Позиция: {player.position}/{LOCATIONS[player.current_location]['map_size']-1}"
+        f"📌 Позиция: ({player.x}, {player.y})"
     )
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -577,8 +699,14 @@ async def back_to_location(callback: types.CallbackQuery, state: FSMContext):
 @dp.message(Command('start'))
 async def cmd_start(message: types.Message, state: FSMContext):
     """Начало игры"""
+    # Генерируем новую карту при старте
+    game_map, chests = generate_map("beach")
     player = Player()
-    await state.update_data(player=player)
+    await state.update_data(
+        player=player,
+        game_map=game_map,
+        chests=chests
+    )
     await show_location(message, state)
 
 @dp.message(Command('ping'))
@@ -589,7 +717,7 @@ async def cmd_ping(message: types.Message):
 
 async def main():
     logging.basicConfig(level=logging.INFO)
-    print("🏖️ Пляжное приключение запущено! Карта 20 клеток с человечком 🧍")
+    print("🏝️ Рандомная карта 20x20 с туманом войны запущена!")
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 

@@ -4,7 +4,7 @@ import random
 import os
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, FSInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -348,7 +348,7 @@ class Player:
 # ============= КЛАССЫ ВРАГОВ =============
 
 class Enemy:
-    def __init__(self, name, hp, damage, accuracy, defense, exp, emoji, rarity):
+    def __init__(self, name, hp, damage, accuracy, defense, exp, emoji, rarity, image_path=None):
         self.name = name
         self.hp = hp
         self.max_hp = hp
@@ -358,32 +358,34 @@ class Enemy:
         self.exp = exp
         self.emoji = emoji
         self.rarity = rarity
+        self.image_path = image_path  # Путь к изображению монстра
 
-# ============= ПУЛ ПРОТИВНИКОВ =============
+# ============= ПУЛ ПРОТИВНИКОВ С ИЗОБРАЖЕНИЯМИ =============
+# Предполагается, что изображения лежат в папке images/monsters/
 
 COMMON_ENEMIES = [
-    {"name": "Зомби", "hp": 35, "damage": (5,10), "accuracy": 60, "defense": 2, "exp": 20, "emoji": "🧟"},
-    {"name": "Скелет", "hp": 30, "damage": (6,12), "accuracy": 65, "defense": 3, "exp": 22, "emoji": "💀"},
-    {"name": "Паук", "hp": 25, "damage": (7,11), "accuracy": 70, "defense": 1, "exp": 18, "emoji": "🕷️"},
-    {"name": "Призрак", "hp": 28, "damage": (8,14), "accuracy": 75, "defense": 0, "exp": 25, "emoji": "👻"},
-    {"name": "Кабан", "hp": 40, "damage": (6,13), "accuracy": 60, "defense": 4, "exp": 23, "emoji": "🐗"},
-    {"name": "Волк", "hp": 38, "damage": (7,15), "accuracy": 70, "defense": 2, "exp": 24, "emoji": "🐺"},
+    {"name": "Зомби", "hp": 35, "damage": (5,10), "accuracy": 60, "defense": 2, "exp": 20, "emoji": "🧟", "image": "images/monsters/zombie.jpg"},
+    {"name": "Скелет", "hp": 30, "damage": (6,12), "accuracy": 65, "defense": 3, "exp": 22, "emoji": "💀", "image": "images/monsters/skeleton.jpg"},
+    {"name": "Паук", "hp": 25, "damage": (7,11), "accuracy": 70, "defense": 1, "exp": 18, "emoji": "🕷️", "image": "images/monsters/spider.jpg"},
+    {"name": "Призрак", "hp": 28, "damage": (8,14), "accuracy": 75, "defense": 0, "exp": 25, "emoji": "👻", "image": "images/monsters/ghost.jpg"},
+    {"name": "Кабан", "hp": 40, "damage": (6,13), "accuracy": 60, "defense": 4, "exp": 23, "emoji": "🐗", "image": "images/monsters/boar.jpg"},
+    {"name": "Волк", "hp": 38, "damage": (7,15), "accuracy": 70, "defense": 2, "exp": 24, "emoji": "🐺", "image": "images/monsters/wolf.jpg"},
 ]
 
 MAGIC_ENEMIES = [
-    {"name": "Магический зомби", "hp": 55, "damage": (8,14), "accuracy": 65, "defense": 4, "exp": 40, "emoji": "🧟✨"},
-    {"name": "Призрачный рыцарь", "hp": 50, "damage": (10,16), "accuracy": 70, "defense": 5, "exp": 42, "emoji": "👻⚔️"},
-    {"name": "Огненный паук", "hp": 45, "damage": (12,18), "accuracy": 75, "defense": 3, "exp": 45, "emoji": "🕷️🔥"},
+    {"name": "Магический зомби", "hp": 55, "damage": (8,14), "accuracy": 65, "defense": 4, "exp": 40, "emoji": "🧟✨", "image": "images/monsters/magic_zombie.jpg"},
+    {"name": "Призрачный рыцарь", "hp": 50, "damage": (10,16), "accuracy": 70, "defense": 5, "exp": 42, "emoji": "👻⚔️", "image": "images/monsters/ghost_knight.jpg"},
+    {"name": "Огненный паук", "hp": 45, "damage": (12,18), "accuracy": 75, "defense": 3, "exp": 45, "emoji": "🕷️🔥", "image": "images/monsters/fire_spider.jpg"},
 ]
 
 RARE_ENEMIES = [
-    {"name": "Культист смерти", "hp": 80, "damage": (15,25), "accuracy": 75, "defense": 8, "exp": 80, "emoji": "🧙💀"},
-    {"name": "Демонический берсерк", "hp": 95, "damage": (18,28), "accuracy": 70, "defense": 10, "exp": 85, "emoji": "👹⚔️"},
+    {"name": "Культист смерти", "hp": 80, "damage": (15,25), "accuracy": 75, "defense": 8, "exp": 80, "emoji": "🧙💀", "image": "images/monsters/death_cultist.jpg"},
+    {"name": "Демонический берсерк", "hp": 95, "damage": (18,28), "accuracy": 70, "defense": 10, "exp": 85, "emoji": "👹⚔️", "image": "images/monsters/demon_berserker.jpg"},
 ]
 
 BOSS_ENEMIES = [
-    {"name": "Повелитель тьмы", "hp": 200, "damage": (25,40), "accuracy": 80, "defense": 15, "exp": 200, "emoji": "👹🔥"},
-    {"name": "Архимаг", "hp": 180, "damage": (28,45), "accuracy": 90, "defense": 10, "exp": 220, "emoji": "🧙‍♂️✨"},
+    {"name": "Повелитель тьмы", "hp": 200, "damage": (25,40), "accuracy": 80, "defense": 15, "exp": 200, "emoji": "👹🔥", "image": "images/monsters/dark_lord.jpg"},
+    {"name": "Архимаг", "hp": 180, "damage": (28,45), "accuracy": 90, "defense": 10, "exp": 220, "emoji": "🧙‍♂️✨", "image": "images/monsters/archmage.jpg"},
 ]
 
 # ============= ПУЛ СОБЫТИЙ =============
@@ -579,7 +581,8 @@ def generate_floor(floor_num):
             "enemy": boss,
             "name": boss["name"],
             "emoji": boss["emoji"],
-            "rarity": "boss"
+            "rarity": "boss",
+            "image": boss.get("image")
         }
     else:
         if random.random() < 0.7:
@@ -589,7 +592,8 @@ def generate_floor(floor_num):
                 "enemy": enemy,
                 "name": enemy["name"],
                 "emoji": enemy["emoji"],
-                "rarity": rarity
+                "rarity": rarity,
+                "image": enemy.get("image")
             }
         else:
             event = random.choice(EVENT_POOL)
@@ -616,7 +620,7 @@ async def show_dungeon(message: types.Message, state: FSMContext):
     
     current_event = floors[player.current_floor - 1]
     
-    # Визуализация подземелья (исправлено)
+    # Визуализация подземелья
     if current_event["type"] in ["battle", "boss"]:
         enemy = current_event["enemy"]
         dungeon_view = f"""
@@ -734,26 +738,19 @@ async def start_battle(callback: types.CallbackQuery, state: FSMContext):
         enemy_data["defense"],
         enemy_data["exp"],
         enemy_data["emoji"],
-        current_floor.get("rarity", "common")
+        current_floor.get("rarity", "common"),
+        enemy_data.get("image")  # Передаем путь к изображению
     )
     
     await state.update_data(battle_enemy=enemy)
-    await show_battle(callback.message, state)
+    await show_battle(callback, state, is_callback=True)
     await callback.answer()
 
-async def show_battle(message: types.Message, state: FSMContext):
+async def show_battle(callback_or_message, state: FSMContext, is_callback=True):
+    """Показывает экран боя с изображением монстра"""
     data = await state.get_data()
     player = data['player']
     enemy = data['battle_enemy']
-    
-    # Визуализация боя
-    battle_view = f"""
-🟫🟫🟫🟫🟫🟫
-
-    👨‍🦱            {enemy.emoji}
-
-🟫🟫🟫🟫🟫🟫
-"""
     
     rarity_color = {
         "common": "🟢",
@@ -763,7 +760,7 @@ async def show_battle(message: types.Message, state: FSMContext):
         "boss": "⚫"
     }.get(enemy.rarity, "")
     
-    # Информация о враге (только HP)
+    # Информация о враге
     enemy_info = f"**{enemy.emoji} {enemy.name}** {rarity_color}\n❤️ {enemy.hp}/{enemy.max_hp} HP"
     
     # Статус фласок (только активная)
@@ -773,11 +770,10 @@ async def show_battle(message: types.Message, state: FSMContext):
         flask_status.append(f"👉 {active_flask.get_status()}")
     flask_text = "\n".join(flask_status) if flask_status else "Нет фласок"
     
-    # Статус игрока (минимально)
+    # Статус игрока
     player_status = f"👤 {player.hp}/{player.max_hp} ❤️"
     
     text = (
-        f"{battle_view}\n\n"
         f"{enemy_info}\n\n"
         f"{player_status}\n"
         f"🧪 {flask_text}\n\n"
@@ -790,7 +786,65 @@ async def show_battle(message: types.Message, state: FSMContext):
         [InlineKeyboardButton(text="🏃 Убежать", callback_data="battle_run")]
     ])
     
-    await message.edit_text(text, reply_markup=keyboard)
+    try:
+        if is_callback:
+            # Это callback - нужно обновить существующее сообщение
+            message = callback_or_message.message
+        else:
+            # Это новое сообщение (например, из start_battle)
+            message = callback_or_message
+        
+        # Проверяем наличие изображения
+        if enemy.image_path and os.path.exists(enemy.image_path):
+            photo = FSInputFile(enemy.image_path)
+            
+            if is_callback:
+                # Для callback: если это сообщение с фото, обновляем подпись
+                if message.photo:
+                    await message.edit_caption(caption=text, reply_markup=keyboard)
+                else:
+                    # Если это текстовое сообщение, удаляем его и отправляем фото
+                    await message.delete()
+                    await message.answer_photo(photo=photo, caption=text, reply_markup=keyboard)
+            else:
+                # Для нового сообщения (start_battle)
+                # Удаляем предыдущее сообщение с данжем
+                try:
+                    await message.delete()
+                except:
+                    pass
+                # Отправляем фото
+                await message.answer_photo(photo=photo, caption=text, reply_markup=keyboard)
+        else:
+            # Если изображения нет, показываем текстовую визуализацию
+            battle_view = f"""
+🟫🟫🟫🟫🟫🟫
+
+    👨‍🦱            {enemy.emoji}
+
+🟫🟫🟫🟫🟫🟫
+"""
+            full_text = f"{battle_view}\n\n{text}"
+            
+            if is_callback:
+                await message.edit_text(full_text, reply_markup=keyboard)
+            else:
+                await message.answer(full_text, reply_markup=keyboard)
+    except Exception as e:
+        print(f"Ошибка при показе боя: {e}")
+        # Fallback на текстовый режим
+        battle_view = f"""
+🟫🟫🟫🟫🟫🟫
+
+    👨‍🦱            {enemy.emoji}
+
+🟫🟫🟫🟫🟫🟫
+"""
+        full_text = f"{battle_view}\n\n{text}"
+        if is_callback:
+            await message.edit_text(full_text, reply_markup=keyboard)
+        else:
+            await message.answer(full_text, reply_markup=keyboard)
 
 @dp.callback_query(lambda c: c.data.startswith('battle_'))
 async def battle_action(callback: types.CallbackQuery, state: FSMContext):
@@ -917,7 +971,11 @@ async def battle_action(callback: types.CallbackQuery, state: FSMContext):
         for text in loot_text:
             result.append(f"   {text}")
         
-        await callback.message.edit_text(
+        # Удаляем сообщение с боем
+        await callback.message.delete()
+        
+        # Отправляем сообщение о победе
+        await callback.message.answer(
             f"🎉 **ПОБЕДА!**\n\n" +
             "\n".join(result)
         )
@@ -934,49 +992,7 @@ async def battle_action(callback: types.CallbackQuery, state: FSMContext):
         return
     
     await state.update_data(player=player, battle_enemy=enemy)
-    
-    # Показываем статус фласок
-    flask_status = []
-    if player.flasks:
-        for i, flask in enumerate(player.flasks):
-            marker = "👉" if i == player.active_flask else "  "
-            flask_status.append(f"{marker} {flask.get_status()}")
-    flask_text = "\n".join(flask_status) if flask_status else "Нет фласок"
-    
-    # Визуализация боя
-    battle_view = f"""
-🟫🟫🟫🟫🟫🟫
-
-    👨‍🦱            {enemy.emoji}
-
-🟫🟫🟫🟫🟫🟫
-"""
-    
-    rarity_color = {
-        "common": "🟢",
-        "magic": "🟣",
-        "rare": "🟡",
-        "epic": "🔴",
-        "boss": "⚫"
-    }.get(enemy.rarity, "")
-    
-    text = (
-        f"{battle_view}\n\n"
-        f"**{enemy.emoji} {enemy.name}** {rarity_color}\n"
-        f"❤️ {enemy.hp}/{enemy.max_hp} HP\n\n"
-        f"👤 {player.hp}/{player.max_hp} ❤️\n"
-        f"🧪 {flask_text}\n\n"
-        f"**Ход:**\n" + "\n".join(result) +
-        f"\n\nТвой ход:"
-    )
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔪 Атаковать", callback_data="battle_attack")],
-        [InlineKeyboardButton(text="🧪 Фласка", callback_data="battle_flask")],
-        [InlineKeyboardButton(text="🏃 Убежать", callback_data="battle_run")]
-    ])
-    
-    await callback.message.edit_text(text, reply_markup=keyboard)
+    await show_battle(callback, state, is_callback=True)
     await callback.answer()
 
 # ============= СОБЫТИЯ =============
@@ -1300,6 +1316,8 @@ async def main():
     print("- Максимум фласок: 3")
     print("\n📦 **Редкость предметов:**")
     print("⚪ Обычный | 🔵 Магический | 🟡 Редкий | 🔴 Уникальный")
+    print("\n🖼️ **Изображения монстров:**")
+    print("Загружены в папку images/monsters/")
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 

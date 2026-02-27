@@ -309,8 +309,10 @@ class Player:
         starter_flask = Flask("small_life")
         self.flasks.append(starter_flask)
         
-        self.current_floor = 1
-        self.max_floor = 10
+        # Текущая позиция в подземелье
+        self.current_position = 0  # Индекс текущего события
+        self.max_position = 20  # Всего 20 событий до выхода
+        self.visited_positions = set()  # Посещенные позиции
     
     def get_total_damage(self):
         """Рассчитывает урон со случайным разбросом 15-30"""
@@ -360,42 +362,46 @@ class Enemy:
         self.rarity = rarity
         self.image_path = image_path  # Путь к изображению монстра
 
-# ============= ПУЛ ПРОТИВНИКОВ С ИЗОБРАЖЕНИЯМИ =============
-# Предполагается, что изображения лежат в папке images/monsters/
+# ============= ПУЛ ПРОТИВНИКОВ ПОДЗЕМЕЛЬЯ =============
+# Только подходящие для подземелья монстры с изображениями
 
 COMMON_ENEMIES = [
-    {"name": "Зомби", "hp": 35, "damage": (5,10), "accuracy": 60, "defense": 2, "exp": 20, "emoji": "🧟", "image": "images/monsters/zombie.jpg"},
-    {"name": "Скелет", "hp": 30, "damage": (6,12), "accuracy": 65, "defense": 3, "exp": 22, "emoji": "💀", "image": "images/monsters/skeleton.jpg"},
-    {"name": "Паук", "hp": 25, "damage": (7,11), "accuracy": 70, "defense": 1, "exp": 18, "emoji": "🕷️", "image": "images/monsters/spider.jpg"},
-    {"name": "Призрак", "hp": 28, "damage": (8,14), "accuracy": 75, "defense": 0, "exp": 25, "emoji": "👻", "image": "images/monsters/ghost.jpg"},
-    {"name": "Кабан", "hp": 40, "damage": (6,13), "accuracy": 60, "defense": 4, "exp": 23, "emoji": "🐗", "image": "images/monsters/boar.jpg"},
-    {"name": "Волк", "hp": 38, "damage": (7,15), "accuracy": 70, "defense": 2, "exp": 24, "emoji": "🐺", "image": "images/monsters/wolf.jpg"},
+    {"name": "Огромный червь", "hp": 40, "damage": (6,12), "accuracy": 65, "defense": 3, "exp": 22, "emoji": "🪱", "image": "images/monsters/worm.jpg"},
+    {"name": "Жуткий кадавр", "hp": 45, "damage": (7,13), "accuracy": 60, "defense": 4, "exp": 24, "emoji": "🧟", "image": "images/monsters/cadaver.jpg"},
+    {"name": "Гниющий зомби", "hp": 35, "damage": (5,10), "accuracy": 55, "defense": 2, "exp": 20, "emoji": "🧟‍♂️", "image": "images/monsters/zombie.jpg"},
+    {"name": "Костяной скелет", "hp": 30, "damage": (6,12), "accuracy": 70, "defense": 2, "exp": 21, "emoji": "💀", "image": "images/monsters/skeleton.jpg"},
+    {"name": "Пещерный паук", "hp": 28, "damage": (7,11), "accuracy": 75, "defense": 1, "exp": 19, "emoji": "🕷️", "image": "images/monsters/spider.jpg"},
+    {"name": "Блуждающий призрак", "hp": 32, "damage": (8,14), "accuracy": 80, "defense": 0, "exp": 26, "emoji": "👻", "image": "images/monsters/ghost.jpg"},
 ]
 
 MAGIC_ENEMIES = [
-    {"name": "Магический зомби", "hp": 55, "damage": (8,14), "accuracy": 65, "defense": 4, "exp": 40, "emoji": "🧟✨", "image": "images/monsters/magic_zombie.jpg"},
-    {"name": "Призрачный рыцарь", "hp": 50, "damage": (10,16), "accuracy": 70, "defense": 5, "exp": 42, "emoji": "👻⚔️", "image": "images/monsters/ghost_knight.jpg"},
-    {"name": "Огненный паук", "hp": 45, "damage": (12,18), "accuracy": 75, "defense": 3, "exp": 45, "emoji": "🕷️🔥", "image": "images/monsters/fire_spider.jpg"},
+    {"name": "Проклятый кадавр", "hp": 60, "damage": (9,15), "accuracy": 65, "defense": 5, "exp": 42, "emoji": "🧟⚡", "image": "images/monsters/cursed_cadaver.jpg"},
+    {"name": "Призрачный страж", "hp": 55, "damage": (10,17), "accuracy": 75, "defense": 4, "exp": 45, "emoji": "👻⚔️", "image": "images/monsters/ghost_guardian.jpg"},
+    {"name": "Огненный червь", "hp": 50, "damage": (12,18), "accuracy": 70, "defense": 3, "exp": 44, "emoji": "🪱🔥", "image": "images/monsters/fire_worm.jpg"},
+    {"name": "Ледяной скелет", "hp": 48, "damage": (9,16), "accuracy": 72, "defense": 5, "exp": 43, "emoji": "💀❄️", "image": "images/monsters/ice_skeleton.jpg"},
 ]
 
 RARE_ENEMIES = [
-    {"name": "Культист смерти", "hp": 80, "damage": (15,25), "accuracy": 75, "defense": 8, "exp": 80, "emoji": "🧙💀", "image": "images/monsters/death_cultist.jpg"},
-    {"name": "Демонический берсерк", "hp": 95, "damage": (18,28), "accuracy": 70, "defense": 10, "exp": 85, "emoji": "👹⚔️", "image": "images/monsters/demon_berserker.jpg"},
+    {"name": "Культист смерти", "hp": 85, "damage": (16,26), "accuracy": 75, "defense": 8, "exp": 85, "emoji": "🧙💀", "image": "images/monsters/death_cultist.jpg"},
+    {"name": "Демонический червь", "hp": 90, "damage": (18,28), "accuracy": 70, "defense": 9, "exp": 88, "emoji": "🪱👹", "image": "images/monsters/demon_worm.jpg"},
+    {"name": "Костяной голем", "hp": 100, "damage": (14,24), "accuracy": 65, "defense": 12, "exp": 90, "emoji": "🦴🗿", "image": "images/monsters/bone_golem.jpg"},
 ]
 
 BOSS_ENEMIES = [
-    {"name": "Повелитель тьмы", "hp": 200, "damage": (25,40), "accuracy": 80, "defense": 15, "exp": 200, "emoji": "👹🔥", "image": "images/monsters/dark_lord.jpg"},
-    {"name": "Архимаг", "hp": 180, "damage": (28,45), "accuracy": 90, "defense": 10, "exp": 220, "emoji": "🧙‍♂️✨", "image": "images/monsters/archmage.jpg"},
+    {"name": "Повелитель червей", "hp": 220, "damage": (26,42), "accuracy": 80, "defense": 15, "exp": 220, "emoji": "🪱👑", "image": "images/monsters/worm_lord.jpg"},
+    {"name": "Архилич", "hp": 200, "damage": (28,45), "accuracy": 90, "defense": 12, "exp": 240, "emoji": "🧙‍♂️💀", "image": "images/monsters/archlich.jpg"},
+    {"name": "Король кадавров", "hp": 240, "damage": (24,40), "accuracy": 75, "defense": 18, "exp": 250, "emoji": "👑🧟", "image": "images/monsters/cadaver_king.jpg"},
 ]
 
 # ============= ПУЛ СОБЫТИЙ =============
 
 EVENT_POOL = [
-    {"type": "chest", "name": "Обычный сундук", "emoji": "📦", "rarity": "common", "chance": 40},
-    {"type": "chest", "name": "Магический сундук", "emoji": "📦✨", "rarity": "magic", "chance": 20},
-    {"type": "chest", "name": "Редкий сундук", "emoji": "📦🌟", "rarity": "rare", "chance": 10},
-    {"type": "rest", "name": "Место отдыха", "emoji": "🔥", "heal": 30, "chance": 20, "desc": "+30 HP"},
-    {"type": "trap", "name": "Ловушка", "emoji": "⚠️", "damage": 20, "chance": 10, "desc": "-20 HP"},
+    {"type": "chest", "name": "Забытый сундук", "emoji": "📦", "rarity": "common", "chance": 30},
+    {"type": "chest", "name": "Магический сундук", "emoji": "📦✨", "rarity": "magic", "chance": 15},
+    {"type": "chest", "name": "Древний сундук", "emoji": "📦🌟", "rarity": "rare", "chance": 8},
+    {"type": "rest", "name": "Место привала", "emoji": "🔥", "heal": 30, "chance": 25, "desc": "+30 HP"},
+    {"type": "trap", "name": "Ловушка", "emoji": "⚠️", "damage": 20, "chance": 15, "desc": "-20 HP"},
+    {"type": "altar", "name": "Древний алтарь", "emoji": "🪦", "effect": "random", "chance": 7, "desc": "Загадочный эффект"},
 ]
 
 # ============= СИСТЕМА ГЕНЕРАЦИИ ПРЕДМЕТОВ =============
@@ -569,40 +575,61 @@ def roll_enemy():
         return random.choice(MAGIC_ENEMIES), "magic"
     elif roll < 99:  # 4% редкие
         return random.choice(RARE_ENEMIES), "rare"
-    else:  # 1% эпические
-        return random.choice(BOSS_ENEMIES), "epic"
+    else:  # 1% боссы (редкие враги)
+        return random.choice(BOSS_ENEMIES), "boss"
 
-def generate_floor(floor_num):
-    """Генерирует событие для конкретного этажа"""
-    if floor_num == 10:
-        boss = random.choice(BOSS_ENEMIES)
-        return {
-            "type": "boss",
-            "enemy": boss,
-            "name": boss["name"],
-            "emoji": boss["emoji"],
-            "rarity": "boss",
-            "image": boss.get("image")
-        }
-    else:
-        if random.random() < 0.7:
+def roll_event():
+    """Роляет случайное событие"""
+    roll = random.random() * 100
+    cumulative = 0
+    
+    for event in EVENT_POOL:
+        cumulative += event["chance"]
+        if roll < cumulative:
+            return event
+    
+    return EVENT_POOL[0]
+
+def generate_dungeon():
+    """Генерирует подземелье из 20 событий"""
+    dungeon = []
+    
+    # Гарантированно добавляем босса в конец
+    for i in range(19):  # 19 случайных событий
+        if random.random() < 0.6:  # 60% шанс на битву
             enemy, rarity = roll_enemy()
-            return {
+            dungeon.append({
                 "type": "battle",
                 "enemy": enemy,
                 "name": enemy["name"],
                 "emoji": enemy["emoji"],
                 "rarity": rarity,
-                "image": enemy.get("image")
-            }
-        else:
-            event = random.choice(EVENT_POOL)
-            return {
+                "image": enemy.get("image"),
+                "completed": False
+            })
+        else:  # 40% шанс на событие
+            event = roll_event()
+            dungeon.append({
                 "type": event["type"],
                 "event": event,
                 "name": event["name"],
-                "emoji": event["emoji"]
-            }
+                "emoji": event["emoji"],
+                "completed": False
+            })
+    
+    # Добавляем босса в конец
+    boss = random.choice(BOSS_ENEMIES)
+    dungeon.append({
+        "type": "boss",
+        "enemy": boss,
+        "name": boss["name"],
+        "emoji": boss["emoji"],
+        "rarity": "boss",
+        "image": boss.get("image"),
+        "completed": False
+    })
+    
+    return dungeon
 
 # ============= ОСНОВНЫЕ ФУНКЦИИ =============
 
@@ -610,94 +637,107 @@ async def show_dungeon(message: types.Message, state: FSMContext):
     """Показывает текущее состояние подземелья"""
     data = await state.get_data()
     
-    if not data or 'floors' not in data:
-        floors = [generate_floor(i) for i in range(1, 11)]
+    if not data or 'dungeon' not in data:
+        dungeon = generate_dungeon()
         player = Player()
-        await state.update_data(player=player, floors=floors)
+        await state.update_data(player=player, dungeon=dungeon)
     else:
         player = data['player']
-        floors = data['floors']
+        dungeon = data['dungeon']
     
-    current_event = floors[player.current_floor - 1]
+    current_event = dungeon[player.current_position]
     
-    # Визуализация подземелья
-    if current_event["type"] in ["battle", "boss"]:
-        enemy = current_event["enemy"]
-        dungeon_view = f"""
-🟫🟫🟫🟫🟫🟫
-
-    👨‍🦱            {enemy['emoji']}
-
-🟫🟫🟫🟫🟫🟫
-"""
-    else:
-        event = current_event["event"]
-        dungeon_view = f"""
-🟫🟫🟫🟫🟫🟫
-
-    👨‍🦱            {event['emoji']}
-
-🟫🟫🟫🟫🟫🟫
-"""
+    # Визуализация прогресса
+    progress = []
+    for i, event in enumerate(dungeon):
+        if i < player.current_position:
+            progress.append("✅")  # Пройдено
+        elif i == player.current_position:
+            if event["type"] in ["battle", "boss"]:
+                progress.append(event["enemy"]["emoji"])  # Текущий монстр
+            else:
+                progress.append(event["emoji"])  # Текущее событие
+        else:
+            progress.append("⬜")  # Не пройдено
     
-    # Информация о текущем этаже (только название и HP для мобов)
-    floor_info = f"📍 **Этаж {player.current_floor}/10**\n\n"
+    progress_bar = " ".join(progress)
     
+    # Информация о текущем событии
     if current_event["type"] in ["battle", "boss"]:
         enemy = current_event["enemy"]
         rarity_text = {
             "common": "🟢",
             "magic": "🟣",
             "rare": "🟡",
-            "epic": "🔴",
             "boss": "⚫"
         }.get(current_event.get("rarity"), "")
-        floor_info += f"**{enemy['emoji']} {enemy['name']}** {rarity_text}\n"
-        floor_info += f"❤️ {enemy['hp']} HP\n"
+        
+        event_info = f"**{enemy['emoji']} {enemy['name']}** {rarity_text}\n"
+        if not current_event.get("completed", False):
+            event_info += f"❤️ {enemy['hp']} HP"
+        else:
+            event_info += "✅ Уже побежден"
     else:
         event = current_event["event"]
-        floor_info += f"**{event['emoji']} {event['name']}**"
+        event_info = f"**{event['emoji']} {event['name']}**"
+        if current_event.get("completed", False):
+            event_info += " ✅ Пройдено"
     
-    # Статус фласок (только активные, коротко)
+    # Статус фласок
     flask_status = []
     if player.flasks:
         active_flask = player.flasks[player.active_flask]
         flask_status.append(f"👉 {active_flask.get_status()}")
     flask_text = "\n".join(flask_status) if flask_status else "Нет фласок"
     
-    # Статус игрока (минимально)
+    # Статус игрока
     player_status = (
-        f"\n\n👤 {player.hp}/{player.max_hp} ❤️\n"
-        f"🧪 **Фласка:**\n{flask_text}"
+        f"👤 {player.hp}/{player.max_hp} ❤️ | Ур. {player.level}\n"
+        f"🧪 {flask_text}\n"
+        f"💰 {player.gold} золота | ✨ {player.exp}/{player.level * 100}"
     )
     
-    text = f"{dungeon_view}\n\n{floor_info}{player_status}"
+    text = (
+        f"🗺️ **ПОДЗЕМЕЛЬЕ**\n\n"
+        f"{progress_bar}\n\n"
+        f"📍 **Текущая позиция:** {player.current_position + 1}/{len(dungeon)}\n\n"
+        f"{event_info}\n\n"
+        f"{player_status}"
+    )
     
     # Кнопки
     buttons = []
     
-    if current_event["type"] in ["battle", "boss"]:
+    if current_event["type"] in ["battle", "boss"] and not current_event.get("completed", False):
         buttons.append([InlineKeyboardButton(text="⚔️ Вступить в бой", callback_data="start_battle")])
-    elif current_event["type"] == "chest":
-        buttons.append([InlineKeyboardButton(text="📦 Открыть сундук", callback_data="open_chest")])
-    elif current_event["type"] == "rest":
-        buttons.append([InlineKeyboardButton(text="🔥 Отдохнуть", callback_data="take_rest")])
-    elif current_event["type"] == "trap":
-        buttons.append([InlineKeyboardButton(text="⚠️ Пройти ловушку", callback_data="trigger_trap")])
+    elif current_event["type"] in ["chest", "rest", "trap", "altar"] and not current_event.get("completed", False):
+        action_text = {
+            "chest": "📦 Открыть",
+            "rest": "🔥 Отдохнуть",
+            "trap": "⚠️ Пройти",
+            "altar": "🪦 Использовать"
+        }.get(current_event["type"], "👆 Взаимодействовать")
+        buttons.append([InlineKeyboardButton(text=action_text, callback_data=f"do_{current_event['type']}")])
     
-    if player.current_floor < player.max_floor:
-        buttons.append([InlineKeyboardButton(text="⬇️ Спуститься ниже", callback_data="next_floor")])
+    # Кнопка "Идти дальше" появляется только если текущее событие пройдено
+    if current_event.get("completed", False) and player.current_position < len(dungeon) - 1:
+        buttons.append([InlineKeyboardButton(text="➡️ Идти дальше", callback_data="next_step")])
+    
+    # Кнопка "Выход" если дошли до конца
+    if player.current_position == len(dungeon) - 1 and current_event.get("completed", False):
+        if current_event["type"] == "boss" and current_event.get("completed", False):
+            buttons.append([InlineKeyboardButton(text="🚪 Выйти из подземелья", callback_data="exit_dungeon")])
     
     buttons.append([
         InlineKeyboardButton(text="🎒 Инвентарь", callback_data="show_inventory"),
         InlineKeyboardButton(text="📊 Экипировка", callback_data="show_equipment")
     ])
     
-    if player.flasks:
+    if len(player.flasks) > 1:
         buttons.append([InlineKeyboardButton(text="🧪 Переключить фласку", callback_data="switch_flask")])
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-    await state.update_data(player=player, floors=floors)
+    await state.update_data(player=player, dungeon=dungeon)
     
     try:
         await message.edit_text(text, reply_markup=keyboard)
@@ -706,17 +746,48 @@ async def show_dungeon(message: types.Message, state: FSMContext):
 
 # ============= ПЕРЕМЕЩЕНИЕ =============
 
-@dp.callback_query(lambda c: c.data == "next_floor")
-async def next_floor(callback: types.CallbackQuery, state: FSMContext):
+@dp.callback_query(lambda c: c.data == "next_step")
+async def next_step(callback: types.CallbackQuery, state: FSMContext):
+    """Идти дальше по подземелью"""
     data = await state.get_data()
     player = data['player']
-    floors = data['floors']
+    dungeon = data['dungeon']
     
-    if player.current_floor < player.max_floor:
-        player.current_floor += 1
+    if player.current_position < len(dungeon) - 1:
+        player.current_position += 1
     
-    await state.update_data(player=player, floors=floors)
+    await state.update_data(player=player, dungeon=dungeon)
     await show_dungeon(callback.message, state)
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data == "exit_dungeon")
+async def exit_dungeon(callback: types.CallbackQuery, state: FSMContext):
+    """Выйти из подземелья (победа)"""
+    data = await state.get_data()
+    player = data['player']
+    
+    # Начисляем бонус за прохождение
+    bonus_exp = player.level * 50
+    bonus_gold = player.level * 100
+    player.exp += bonus_exp
+    player.gold += bonus_gold
+    
+    # Проверка на повышение уровня
+    while player.exp >= player.level * 100:
+        player.level += 1
+        player.max_hp += 10
+        player.hp = player.max_hp
+    
+    await callback.message.edit_text(
+        f"🎉 **ПОДЗЕМЕЛЬЕ ПРОЙДЕНО!**\n\n"
+        f"Ты нашел выход из темницы!\n\n"
+        f"💰 Бонус: +{bonus_gold} золота\n"
+        f"✨ Бонус: +{bonus_exp} опыта\n"
+        f"👤 Новый уровень: {player.level}\n\n"
+        f"Хочешь начать новое подземелье? Отправь /start"
+    )
+    
+    await state.clear()
     await callback.answer()
 
 # ============= БОЙ =============
@@ -725,10 +796,10 @@ async def next_floor(callback: types.CallbackQuery, state: FSMContext):
 async def start_battle(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     player = data['player']
-    floors = data['floors']
+    dungeon = data['dungeon']
     
-    current_floor = floors[player.current_floor - 1]
-    enemy_data = current_floor["enemy"]
+    current_event = dungeon[player.current_position]
+    enemy_data = current_event["enemy"]
     
     enemy = Enemy(
         enemy_data["name"],
@@ -738,8 +809,8 @@ async def start_battle(callback: types.CallbackQuery, state: FSMContext):
         enemy_data["defense"],
         enemy_data["exp"],
         enemy_data["emoji"],
-        current_floor.get("rarity", "common"),
-        enemy_data.get("image")  # Передаем путь к изображению
+        current_event.get("rarity", "common"),
+        enemy_data.get("image")
     )
     
     await state.update_data(battle_enemy=enemy)
@@ -756,14 +827,13 @@ async def show_battle(callback_or_message, state: FSMContext, is_callback=True):
         "common": "🟢",
         "magic": "🟣",
         "rare": "🟡",
-        "epic": "🔴",
         "boss": "⚫"
     }.get(enemy.rarity, "")
     
     # Информация о враге
     enemy_info = f"**{enemy.emoji} {enemy.name}** {rarity_color}\n❤️ {enemy.hp}/{enemy.max_hp} HP"
     
-    # Статус фласок (только активная)
+    # Статус фласок
     flask_status = []
     if player.flasks:
         active_flask = player.flasks[player.active_flask]
@@ -788,35 +858,27 @@ async def show_battle(callback_or_message, state: FSMContext, is_callback=True):
     
     try:
         if is_callback:
-            # Это callback - нужно обновить существующее сообщение
             message = callback_or_message.message
         else:
-            # Это новое сообщение (например, из start_battle)
             message = callback_or_message
         
-        # Проверяем наличие изображения
         if enemy.image_path and os.path.exists(enemy.image_path):
             photo = FSInputFile(enemy.image_path)
             
             if is_callback:
-                # Для callback: если это сообщение с фото, обновляем подпись
-                if message.photo:
+                if hasattr(message, 'photo') and message.photo:
                     await message.edit_caption(caption=text, reply_markup=keyboard)
                 else:
-                    # Если это текстовое сообщение, удаляем его и отправляем фото
                     await message.delete()
                     await message.answer_photo(photo=photo, caption=text, reply_markup=keyboard)
             else:
-                # Для нового сообщения (start_battle)
-                # Удаляем предыдущее сообщение с данжем
                 try:
                     await message.delete()
                 except:
                     pass
-                # Отправляем фото
                 await message.answer_photo(photo=photo, caption=text, reply_markup=keyboard)
         else:
-            # Если изображения нет, показываем текстовую визуализацию
+            # Текстовая версия без изображения
             battle_view = f"""
 🟫🟫🟫🟫🟫🟫
 
@@ -832,7 +894,7 @@ async def show_battle(callback_or_message, state: FSMContext, is_callback=True):
                 await message.answer(full_text, reply_markup=keyboard)
     except Exception as e:
         print(f"Ошибка при показе боя: {e}")
-        # Fallback на текстовый режим
+        # Fallback
         battle_view = f"""
 🟫🟫🟫🟫🟫🟫
 
@@ -852,7 +914,7 @@ async def battle_action(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     player = data['player']
     enemy = data['battle_enemy']
-    floors = data['floors']
+    dungeon = data['dungeon']
     
     result = []
     
@@ -882,7 +944,6 @@ async def battle_action(callback: types.CallbackQuery, state: FSMContext):
         if enemy.hp > 0:
             if random.randint(1, 100) <= enemy.accuracy:
                 enemy_damage = random.randint(enemy.damage[0], enemy.damage[1])
-                # Защита снижает урон
                 damage_block = max(0, player.defense) // 2
                 final_enemy_damage = max(1, enemy_damage - damage_block)
                 player.hp -= final_enemy_damage
@@ -898,7 +959,7 @@ async def battle_action(callback: types.CallbackQuery, state: FSMContext):
                 player.hp = min(player.max_hp, player.hp + heal)
                 result.append(f"🧪 {flask.name}: +{heal} HP [{flask.current_uses}/{flask.flask_data['uses']}]")
                 
-                # Автоматически переключаем на следующую фласку с зарядами
+                # Автоматическое переключение на следующую фласку
                 if flask.current_uses == 0:
                     for i, f in enumerate(player.flasks):
                         if f.current_uses > 0:
@@ -906,7 +967,6 @@ async def battle_action(callback: types.CallbackQuery, state: FSMContext):
                             break
             else:
                 result.append("❌ Фласка пуста!")
-                # Ищем другую фласку с зарядами
                 for i, f in enumerate(player.flasks):
                     if f.current_uses > 0:
                         player.active_flask = i
@@ -930,6 +990,7 @@ async def battle_action(callback: types.CallbackQuery, state: FSMContext):
                 result.append(f"💥 {enemy.name} атакует: {enemy_damage}")
     
     if enemy.hp <= 0:
+        # Победа
         player.exp += enemy.exp
         while player.exp >= player.level * 100:
             player.level += 1
@@ -937,7 +998,7 @@ async def battle_action(callback: types.CallbackQuery, state: FSMContext):
             player.hp = player.max_hp
             result.append(f"✨ **УРОВЕНЬ {player.level}!**")
         
-        # Восстанавливаем заряды фласок за убийство
+        # Восстанавливаем заряды фласок
         charges = player.add_flask_charge()
         if charges > 0:
             result.append(f"🧪 Восстановлено {charges} зарядов фласок")
@@ -954,33 +1015,31 @@ async def battle_action(callback: types.CallbackQuery, state: FSMContext):
                 player.gold += item["amount"]
                 loot_text.append(f"💰 {item['amount']} золота")
             elif isinstance(item, Item):
-                # Проверяем лимит фласок
                 if item.item_type == ItemType.FLASK:
                     if len(player.flasks) < player.max_flasks:
                         player.flasks.append(item)
                         loot_text.append(f"🧪 Новая фласка: {item.get_name_colored()} [{item.current_uses}/{item.flask_data['uses']}]")
                     else:
-                        # Если уже 3 фласки, в инвентарь
                         player.inventory.append(item)
                         loot_text.append(f"🧪 {item.get_name_colored()} (в инвентаре)")
                 else:
                     player.inventory.append(item)
                     loot_text.append(item.get_name_colored())
         
-        result.append(f"\n💰 **Добыча:**")
-        for text in loot_text:
-            result.append(f"   {text}")
+        # Отмечаем событие как пройденное
+        dungeon[player.current_position]["completed"] = True
         
         # Удаляем сообщение с боем
         await callback.message.delete()
         
         # Отправляем сообщение о победе
-        await callback.message.answer(
-            f"🎉 **ПОБЕДА!**\n\n" +
-            "\n".join(result)
-        )
+        victory_text = f"🎉 **ПОБЕДА!**\n\n" + "\n".join(result)
+        if loot_text:
+            victory_text += f"\n\n💰 **Добыча:**\n" + "\n".join(f"   {text}" for text in loot_text)
         
-        await state.update_data(player=player, floors=floors)
+        await callback.message.answer(victory_text)
+        
+        await state.update_data(player=player, dungeon=dungeon)
         await asyncio.sleep(2)
         await show_dungeon(callback.message, state)
         await callback.answer()
@@ -997,105 +1056,99 @@ async def battle_action(callback: types.CallbackQuery, state: FSMContext):
 
 # ============= СОБЫТИЯ =============
 
-@dp.callback_query(lambda c: c.data == "open_chest")
-async def open_chest(callback: types.CallbackQuery, state: FSMContext):
+@dp.callback_query(lambda c: c.data.startswith('do_'))
+async def do_event(callback: types.CallbackQuery, state: FSMContext):
+    event_type = callback.data.split('_')[1]
     data = await state.get_data()
     player = data['player']
-    floors = data['floors']
+    dungeon = data['dungeon']
     
-    current_floor = floors[player.current_floor - 1]
-    event = current_floor["event"]
+    current_event = dungeon[player.current_position]
+    event = current_event["event"]
     
-    gold = 0
-    items = []
+    result_text = ""
     
-    if event.get("rarity") == "magic":
-        gold = random.randint(40, 70)
-        if random.random() < 0.3:
-            item = generate_item("magic")
-            if item:
-                items.append(item)
-    elif event.get("rarity") == "rare":
-        gold = random.randint(70, 120)
-        if random.random() < 0.6:
-            item = generate_item("rare")
-            if item:
-                items.append(item)
-    else:
-        gold = random.randint(15, 35)
-        if random.random() < 0.1:
-            item = generate_item("common")
-            if item:
-                items.append(item)
+    if event_type == "chest":
+        gold = 0
+        items = []
+        
+        if event.get("rarity") == "magic":
+            gold = random.randint(40, 70)
+            if random.random() < 0.3:
+                item = generate_item("magic")
+                if item:
+                    items.append(item)
+        elif event.get("rarity") == "rare":
+            gold = random.randint(70, 120)
+            if random.random() < 0.6:
+                item = generate_item("rare")
+                if item:
+                    items.append(item)
+        else:
+            gold = random.randint(15, 35)
+            if random.random() < 0.1:
+                item = generate_item("common")
+                if item:
+                    items.append(item)
+        
+        player.gold += gold
+        
+        items_text = []
+        for item in items:
+            player.inventory.append(item)
+            items_text.append(item.get_name_colored())
+        
+        items_str = "\n".join(items_text) if items_text else "ничего"
+        result_text = f"📦 **СУНДУК ОТКРЫТ!**\n\n💰 Найдено: {gold} золота\n🎒 Предметы:\n{items_str}"
     
-    player.gold += gold
+    elif event_type == "rest":
+        heal = event["heal"]
+        player.hp = min(player.max_hp, player.hp + heal)
+        result_text = f"🔥 **ОТДЫХ**\n\nТы восстановил {heal} HP\n❤️ {player.hp}/{player.max_hp}"
     
-    items_text = []
-    for item in items:
-        player.inventory.append(item)
-        items_text.append(item.get_name_colored())
+    elif event_type == "trap":
+        damage = event["damage"]
+        damage = max(1, damage - player.defense // 4)
+        player.hp -= damage
+        
+        if player.hp <= 0:
+            await callback.message.edit_text("💀 **ТЫ ПОГИБ В ЛОВУШКЕ...**")
+            await callback.answer()
+            return
+        
+        result_text = f"⚠️ **ЛОВУШКА**\n\nТы потерял {damage} HP\n❤️ {player.hp}/{player.max_hp}"
     
-    items_str = "\n".join(items_text) if items_text else "ничего"
+    elif event_type == "altar":
+        # Случайный эффект алтаря
+        effects = [
+            {"name": "Силы", "effect": "damage", "value": 3, "text": "⚔️ Урон увеличен на 3"},
+            {"name": "Здоровья", "effect": "max_hp", "value": 20, "text": "❤️ Макс. здоровье +20"},
+            {"name": "Защиты", "effect": "defense", "value": 3, "text": "🛡️ Защита +3"},
+            {"name": "Золота", "effect": "gold", "value": 60, "text": "💰 +60 золота"},
+            {"name": "Крита", "effect": "crit_chance", "value": 3, "text": "🔥 Шанс крита +3%"},
+        ]
+        
+        effect = random.choice(effects)
+        
+        if effect["effect"] == "damage":
+            player.damage += effect["value"]
+        elif effect["effect"] == "max_hp":
+            player.max_hp += effect["value"]
+            player.hp += effect["value"]
+        elif effect["effect"] == "defense":
+            player.defense += effect["value"]
+        elif effect["effect"] == "gold":
+            player.gold += effect["value"]
+        elif effect["effect"] == "crit_chance":
+            player.crit_chance += effect["value"]
+        
+        result_text = f"🪦 **АЛТАРЬ {effect['name']}**\n\n{effect['text']}"
     
-    await callback.message.edit_text(
-        f"📦 **СУНДУК ОТКРЫТ!**\n\n"
-        f"💰 Найдено: {gold} золота\n"
-        f"🎒 Предметы:\n{items_str}"
-    )
+    # Отмечаем событие как пройденное
+    dungeon[player.current_position]["completed"] = True
     
-    await state.update_data(player=player, floors=floors)
-    await asyncio.sleep(2)
-    await show_dungeon(callback.message, state)
-    await callback.answer()
-
-@dp.callback_query(lambda c: c.data == "take_rest")
-async def take_rest(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    player = data['player']
-    floors = data['floors']
-    
-    current_floor = floors[player.current_floor - 1]
-    event = current_floor["event"]
-    
-    heal = event["heal"]
-    player.hp = min(player.max_hp, player.hp + heal)
-    
-    await callback.message.edit_text(
-        f"🔥 **ОТДЫХ**\n\n"
-        f"Ты восстановил {heal} HP\n"
-        f"❤️ {player.hp}/{player.max_hp}"
-    )
-    
-    await state.update_data(player=player, floors=floors)
-    await asyncio.sleep(2)
-    await show_dungeon(callback.message, state)
-    await callback.answer()
-
-@dp.callback_query(lambda c: c.data == "trigger_trap")
-async def trigger_trap(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    player = data['player']
-    floors = data['floors']
-    
-    current_floor = floors[player.current_floor - 1]
-    event = current_floor["event"]
-    
-    damage = event["damage"]
-    damage = max(1, damage - player.defense // 4)
-    player.hp -= damage
-    
-    if player.hp <= 0:
-        await callback.message.edit_text("💀 **ТЫ ПОГИБ В ЛОВУШКЕ...**")
-        await callback.answer()
-        return
-    
-    await callback.message.edit_text(
-        f"⚠️ **ЛОВУШКА**\n\n"
-        f"Ты потерял {damage} HP\n"
-        f"❤️ {player.hp}/{player.max_hp}"
-    )
-    
-    await state.update_data(player=player, floors=floors)
+    await callback.message.edit_text(result_text)
+    await state.update_data(player=player, dungeon=dungeon)
     await asyncio.sleep(2)
     await show_dungeon(callback.message, state)
     await callback.answer()
@@ -1112,7 +1165,6 @@ async def show_inventory(callback: types.CallbackQuery, state: FSMContext):
     else:
         text = "🎒 **ИНВЕНТАРЬ**\n\n"
         
-        # Группируем предметы по типу
         equipment = []
         flasks = []
         
@@ -1122,13 +1174,11 @@ async def show_inventory(callback: types.CallbackQuery, state: FSMContext):
             else:
                 equipment.append(item)
         
-        # Сначала экипировка
         if equipment:
             text += "**⚔️ Экипировка:**\n"
             for i, item in enumerate(equipment):
                 text += f"{i+1}. {item.get_name_colored()}\n"
         
-        # Потом фласки
         if flasks:
             text += "\n**🧪 Фласки:**\n"
             for i, item in enumerate(flasks, start=len(equipment)):
@@ -1136,16 +1186,11 @@ async def show_inventory(callback: types.CallbackQuery, state: FSMContext):
     
     text += f"\n💰 Золото: {player.gold}"
     
-    # Кнопки для просмотра деталей
     keyboard_buttons = []
     if player.inventory:
-        # Кнопки для просмотра каждого предмета
         row = []
-        for i, item in enumerate(player.inventory[:5]):  # Максимум 5 кнопок
-            row.append(InlineKeyboardButton(
-                text=f"🔍 {i+1}", 
-                callback_data=f"inspect_{i}"
-            ))
+        for i, item in enumerate(player.inventory[:5]):
+            row.append(InlineKeyboardButton(text=f"🔍 {i+1}", callback_data=f"inspect_{i}"))
         if row:
             keyboard_buttons.append(row)
     
@@ -1160,7 +1205,6 @@ async def show_inventory(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data.startswith('inspect_'))
 async def inspect_item(callback: types.CallbackQuery, state: FSMContext):
-    """Просмотр детальной информации о предмете"""
     data = await state.get_data()
     player = data['player']
     
@@ -1171,7 +1215,6 @@ async def inspect_item(callback: types.CallbackQuery, state: FSMContext):
         
         text = item.get_detailed_info()
         
-        # Кнопки действий
         keyboard_buttons = []
         
         if item.item_type != ItemType.FLASK:
@@ -1190,7 +1233,6 @@ async def inspect_item(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data.startswith('equip_from_inspect_'))
 async def equip_from_inspect(callback: types.CallbackQuery, state: FSMContext):
-    """Экипировка из режима просмотра"""
     data = await state.get_data()
     player = data['player']
     
@@ -1203,7 +1245,6 @@ async def equip_from_inspect(callback: types.CallbackQuery, state: FSMContext):
             await callback.answer("❌ Фласки нельзя экипировать!")
             return
         
-        # Экипируем предмет
         player.equip(item, item.item_type)
         await callback.answer(f"✅ Экипировано: {item.name}")
     
@@ -1232,7 +1273,6 @@ async def show_equipment(callback: types.CallbackQuery, state: FSMContext):
             text += f"**{slot_names[slot_type]}:**\n"
             text += f"└ {item.get_name_colored()}\n"
             
-            # Показываем аффиксы
             for affix_type, affix_data in item.affixes:
                 value = item.stats.get(affix_data["stat"], 0)
                 stat_names = {
@@ -1281,8 +1321,6 @@ async def switch_flask(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(player=player)
     await show_dungeon(callback.message, state)
 
-# ============= НАВИГАЦИЯ =============
-
 @dp.callback_query(lambda c: c.data == "back_to_dungeon")
 async def back_to_dungeon(callback: types.CallbackQuery, state: FSMContext):
     await show_dungeon(callback.message, state)
@@ -1292,9 +1330,9 @@ async def back_to_dungeon(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.message(Command('start'))
 async def cmd_start(message: types.Message, state: FSMContext):
-    floors = [generate_floor(i) for i in range(1, 11)]
+    dungeon = generate_dungeon()
     player = Player()
-    await state.update_data(player=player, floors=floors)
+    await state.update_data(player=player, dungeon=dungeon)
     await show_dungeon(message, state)
 
 @dp.message(Command('ping'))
@@ -1305,19 +1343,32 @@ async def cmd_ping(message: types.Message):
 
 async def main():
     logging.basicConfig(level=logging.INFO)
-    print("🗺️ Path of Exile Dungeon запущено!")
-    print("🟫🟫🟫🟫🟫🟫")
-    print("    👨‍🦱            🐗")
-    print("🟫🟫🟫🟫🟫🟫")
-    print("\n⚔️ **Параметры:**")
-    print("- Урон: 15-30")
-    print("- Крит: 5% x125%")
-    print("- Фласки: 3 заряда, восстанавливаются после убийств")
-    print("- Максимум фласок: 3")
-    print("\n📦 **Редкость предметов:**")
-    print("⚪ Обычный | 🔵 Магический | 🟡 Редкий | 🔴 Уникальный")
-    print("\n🖼️ **Изображения монстров:**")
-    print("Загружены в папку images/monsters/")
+    print("🗺️ Dungeon Crawler запущено!")
+    print("\n👤 **Новая механика:**")
+    print("- Игрок идет по подземелью из 20 событий")
+    print("- Каждое событие можно пройти только один раз")
+    print("- После победы над монстром он исчезает")
+    print("- В конце подземелья ждет босс")
+    print("\n👾 **Монстры подземелья:**")
+    print("- Огромный червь 🪱 (worm.jpg)")
+    print("- Жуткий кадавр 🧟 (cadaver.jpg)")
+    print("- Гниющий зомби 🧟‍♂️ (zombie.jpg)")
+    print("- Костяной скелет 💀 (skeleton.jpg)")
+    print("- Пещерный паук 🕷️ (spider.jpg)")
+    print("- Блуждающий призрак 👻 (ghost.jpg)")
+    print("\n✨ **Магические монстры:**")
+    print("- Проклятый кадавр 🧟⚡ (cursed_cadaver.jpg)")
+    print("- Призрачный страж 👻⚔️ (ghost_guardian.jpg)")
+    print("- Огненный червь 🪱🔥 (fire_worm.jpg)")
+    print("- Ледяной скелет 💀❄️ (ice_skeleton.jpg)")
+    print("\n🔥 **Редкие монстры:**")
+    print("- Культист смерти 🧙💀 (death_cultist.jpg)")
+    print("- Демонический червь 🪱👹 (demon_worm.jpg)")
+    print("- Костяной голем 🦴🗿 (bone_golem.jpg)")
+    print("\n👑 **Боссы:**")
+    print("- Повелитель червей 🪱👑 (worm_lord.jpg)")
+    print("- Архилич 🧙‍♂️💀 (archlich.jpg)")
+    print("- Король кадавров 👑🧟 (cadaver_king.jpg)")
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
